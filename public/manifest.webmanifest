@@ -1,0 +1,19 @@
+{
+  "name": "라인댄스 강사 관리",
+  "short_name": "라인댄스",
+  "description": "라인댄스 강사용 수업, 회원, 출석, 결제 관리 앱",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f5f7fb",
+  "theme_color": "#3478f6",
+  "icons": [
+    {
+      "src": "/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+import { expect, test } from '@playwright/test'
+
+test.use({ viewport: { width: 390, height: 844 } })
+
+test.beforeEach(async ({ page }) => {
+  await page.goto('/')
+  await page.evaluate(() => localStorage.clear())
+  await page.reload()
+})
+
+test('instructor can manage classes, members, attendance, and payment details', async ({
+  page,
+}) => {
+  await expect(page.getByRole('heading', { name: '강사용 운영관리' })).toBeVisible()
+  await expect(page.getByText('오늘 해야 할 수업')).toBeVisible()
+
+  await page.getByRole('button', { name: '시간표', exact: true }).click()
+  await expect(page.getByText('10시 이후 시간대별 보기')).toBeVisible()
+  await expect(page.getByText('초급 라인댄스').first()).toBeVisible()
+  await page.locator('details.classEditor').first().locator('summary').click()
+  await page.locator('details.classEditor').first().locator('input[name="tuitionFee"]').fill('95000')
+  await page.locator('details.classEditor').first().getByRole('button', { name: '수정 저장' }).click()
+  await expect(page.getByText('₩95,000').first()).toBeVisible()
+
+  await page.getByRole('button', { name: '회원' }).click()
+  await page.getByPlaceholder('회원 이름').fill('최하은')
+  await page.getByPlaceholder('010-0000-0000').fill('010-5555-1212')
+  await page.getByLabel('결제 금액').fill('95000')
+  await page.locator('input[name="note"]').first().fill('오전반 신규')
+  await page.getByRole('button', { name: '추가' }).click()
+  await expect(page.getByText('최하은')).toBeVisible()
+  await page.locator('.memberLookupCard').filter({ hasText: '최하은' }).locator('.editMemberButton').click()
+  await expect(page.getByText('₩95,000').first()).toBeVisible()
+  await page.locator('.memberLookupCard').filter({ hasText: '최하은' }).locator('textarea[name="note"]').fill('첫 상담 완료, 다음 주 등록 예정')
+  await page.locator('.memberLookupCard').filter({ hasText: '최하은' }).getByRole('button', { name: '회원 정보 저장' }).click()
+  await page.locator('.memberLookupCard').filter({ hasText: '최하은' }).locator('.editMemberButton').click()
+  await expect(
+    page.locator('.memberLookupFoot').filter({ hasText: '첫 상담 완료, 다음 주 등록 예정' }),
+  ).toBeVisible()
+
+  await page.getByRole('button', { name: '출석' }).click()
+  const newMemberRow = page.locator('.attendanceRow').filter({ hasText: '최하은' })
+  await expect(newMemberRow).toBeVisible()
+  await newMemberRow.getByRole('button', { name: '출석' }).click()
+  await expect(newMemberRow.getByText('출석 완료')).toBeVisible()
+
+  await page.getByRole('button', { name: '결제' }).click()
+  const paymentCard = page.locator('.paymentCard').filter({ hasText: '최하은' })
+  await paymentCard.getByRole('combobox').first().selectOption('unpaid')
+  await paymentCard.getByRole('button', { name: '저장' }).click()
+  await expect(paymentCard.locator('b.unpaid')).toHaveText('미납')
+})

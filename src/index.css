@@ -1,0 +1,48 @@
+:root {
+  --surface: #f5f7fb;
+  --panel: #ffffff;
+  --soft: #f7f9fd;
+  --ink: #111827;
+  --muted: #6b7280;
+  --line: #e5eaf2;
+  --primary: #3478f6;
+  --primary-2: #7c8cff;
+  --blue-soft: #edf4ff;
+  --ok: #0f7a3b;
+  --ok-soft: #e8f8ee;
+  --warn: #b7791f;
+  --warn-soft: #fff7df;
+  --danger: #c24135;
+  --danger-soft: #fff0ef;
+  --shadow: 0 10px 28px rgba(17, 24, 39, 0.06);
+  --shadow-blue: 0 18px 44px rgba(52, 120, 246, 0.2);
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Pretendard',
+    'Noto Sans KR', 'Malgun Gothic', 'Segoe UI', system-ui, sans-serif;
+  color: var(--ink);
+  background: #eef2f7;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  font-size: 15px;
+  line-height: 1.45;
+  word-break: keep-all;
+  overflow-x: hidden;
+}
+
+button,
+input,
+select,
+textarea {
+  letter-spacing: 0;
+}
