@@ -3,6 +3,7 @@ import { expect, test } from '@playwright/test'
 test.use({ viewport: { width: 390, height: 844 } })
 
 test.beforeEach(async ({ page }) => {
+  page.on('dialog', (dialog) => dialog.accept())
   await page.goto('./')
   await page.evaluate(() => localStorage.clear())
   await page.reload()
@@ -64,4 +65,22 @@ test('instructor can manage classes, members, attendance, and payment details', 
   await paymentCard.getByRole('combobox').first().selectOption('unpaid')
   await paymentCard.getByRole('button', { name: '저장' }).click()
   await expect(paymentCard.locator('b.unpaid')).toHaveText('미납')
+
+  // 재결제 원클릭: 미납 → 완납, 결제일 갱신
+  await paymentCard.getByRole('button', { name: '재결제 받음 (완납 처리)' }).click()
+  await expect(paymentCard.locator('b.paid')).toHaveText('완납')
+
+  // 상담 → 등록 회원 전환
+  await page.getByRole('button', { name: '상담' }).click()
+  await page
+    .locator('.consultCard')
+    .filter({ hasText: '정수진' })
+    .getByRole('button', { name: '등록 회원으로 전환' })
+    .click()
+  await expect(page.locator('.memberLookupCard').filter({ hasText: '정수진' })).toBeVisible()
+
+  // 미체크 회원 전체 출석 처리
+  await page.getByRole('button', { name: '출석' }).click()
+  await page.getByRole('button', { name: /전체 출석 처리/ }).click()
+  await expect(page.getByText('미체크 0')).toBeVisible()
 })

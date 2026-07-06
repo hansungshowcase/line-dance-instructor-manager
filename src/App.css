@@ -1862,6 +1862,125 @@ button {
   grid-column: 1 / -1;
 }
 
+/* ---------- 액션 버튼들 ---------- */
+
+.dangerButton {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 48px;
+  border: 1px solid rgba(224, 73, 47, 0.3);
+  border-radius: var(--radius-md);
+  background: white;
+  color: var(--danger);
+  font-size: 14px;
+  font-weight: 700;
+  transition: all 0.15s ease;
+}
+
+.dangerButton:active {
+  transform: scale(0.98);
+  background: var(--danger-soft);
+}
+
+.convertButton {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 48px;
+  border-radius: var(--radius-md);
+  background: var(--charcoal);
+  color: white;
+  font-size: 14px;
+  font-weight: 700;
+  box-shadow: 0 8px 18px rgba(46, 49, 56, 0.18);
+  transition: transform 0.15s ease;
+}
+
+.convertButton:active {
+  transform: scale(0.98);
+}
+
+.renewButton {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 48px;
+  border-radius: var(--radius-md);
+  background: var(--grad);
+  color: white;
+  font-size: 14px;
+  font-weight: 700;
+  box-shadow: 0 8px 18px rgba(109, 135, 250, 0.28);
+  transition: transform 0.15s ease;
+}
+
+.renewButton:active {
+  transform: scale(0.98);
+}
+
+.markAllButton {
+  width: 100%;
+  min-height: 48px;
+  margin-bottom: 12px;
+  border: 1px solid rgba(21, 154, 91, 0.3);
+  border-radius: var(--radius-md);
+  background: var(--ok-soft);
+  color: var(--ok);
+  font-size: 14px;
+  font-weight: 700;
+  transition: all 0.15s ease;
+}
+
+.markAllButton:active {
+  transform: scale(0.98);
+}
+
+.passList {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.passListItem {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: white;
+  padding: 10px 12px;
+}
+
+.passListItem > span {
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.passListItem button {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.backupActions .secondaryButton {
+  cursor: pointer;
+}
+
+.importButton {
+  position: relative;
+}
+
+.importButton input {
+  display: none;
+}
+
 /* ---------- 플로팅 버튼 ---------- */
 
 .fab {

@@ -371,6 +371,7 @@ function App() {
   const [query, setQuery] = useState('')
   const [selectedClassId, setSelectedClassId] = useState(seedClasses[0].id)
   const [attendanceDate, setAttendanceDate] = useState(todayKey)
+  const [convertedMemberId, setConvertedMemberId] = useState<string | null>(null)
 
   useEffect(() => {
     window.scrollTo(0, 0)
@@ -391,6 +392,15 @@ function App() {
   const classMembers = selectedClass
     ? activeMembers.filter((member) => member.classIds.includes(selectedClass.id))
     : []
+  const lowCreditMembers = activeMembers.filter(
+    (member) =>
+      member.paymentStatus !== 'unpaid' &&
+      member.totalCredits > 0 &&
+      member.remainingCredits <= 2,
+  )
+  const expiringOnly = expiringMembers.filter(
+    (member) => !lowCreditMembers.some((lowCredit) => lowCredit.id === member.id),
+  )
   const fabDrawerId = {
     home: null,
     schedule: null,
@@ -625,6 +635,132 @@ function App() {
     markAttendance(attendanceDate, selectedClass.id, memberId, status)
   }
 
+  function convertToMember(memberId: string) {
+    setMembers((current) =>
+      current.map((member) =>
+        member.id === memberId
+          ? {
+              ...member,
+              status: 'active' as MemberStatus,
+              passType:
+                member.passType === '상담' || member.passType === '대기'
+                  ? '월회비'
+                  : member.passType,
+              paymentStatus: 'paid' as PaymentStatus,
+              lastPaidAt: todayKey,
+              nextPaymentDue: addDays(30),
+              passUntil: addDays(30),
+            }
+          : member,
+      ),
+    )
+    setConvertedMemberId(memberId)
+    setTab('members')
+  }
+
+  function quickRenew(memberId: string) {
+    setMembers((current) =>
+      current.map((member) =>
+        member.id === memberId
+          ? {
+              ...member,
+              paymentStatus: 'paid' as PaymentStatus,
+              lastPaidAt: todayKey,
+              nextPaymentDue: addDays(30),
+              passUntil: addDays(30),
+              remainingCredits:
+                member.totalCredits > 0 ? member.totalCredits : member.remainingCredits,
+            }
+          : member,
+      ),
+    )
+  }
+
+  function markAllPresent() {
+    if (!selectedClass) return
+    classMembers.forEach((member) => {
+      const key = attendanceKey(attendanceDate, selectedClass.id, member.id)
+      if (!attendance[key]) {
+        markAttendance(attendanceDate, selectedClass.id, member.id, 'present')
+      }
+    })
+  }
+
+  function removeClass(classId: string) {
+    setClasses((current) => current.filter((danceClass) => danceClass.id !== classId))
+    setMembers((current) =>
+      current.map((member) =>
+        member.classIds.includes(classId)
+          ? { ...member, classIds: member.classIds.filter((id) => id !== classId) }
+          : member,
+      ),
+    )
+    setPassTemplates((current) =>
+      current.map((pass) =>
+        pass.classIds.includes(classId)
+          ? { ...pass, classIds: pass.classIds.filter((id) => id !== classId) }
+          : pass,
+      ),
+    )
+  }
+
+  function removeMember(memberId: string) {
+    setMembers((current) => current.filter((member) => member.id !== memberId))
+    setAttendance((current) =>
+      Object.fromEntries(
+        Object.entries(current).filter(([key]) => !key.endsWith(`|${memberId}`)),
+      ),
+    )
+  }
+
+  function removePassTemplate(passId: string) {
+    setPassTemplates((current) => current.filter((pass) => pass.id !== passId))
+  }
+
+  function exportData() {
+    const payload = JSON.stringify({ members, classes, passTemplates, attendance }, null, 2)
+    const blob = new Blob([payload], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `라인댄스-백업-${todayKey}.json`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
+  function importData(file: File) {
+    const reader = new FileReader()
+    reader.onload = () => {
+      try {
+        const saved = JSON.parse(String(reader.result)) as {
+          members?: Array<Omit<Member, 'totalCredits'> & { totalCredits?: number }>
+          classes?: DanceClass[]
+          passTemplates?: PassTemplate[]
+          attendance?: AttendanceBook
+        }
+        if (!saved.members?.length && !saved.classes?.length) {
+          window.alert('백업 파일 형식이 아닙니다.')
+          return
+        }
+        if (!window.confirm('현재 데이터를 백업 파일 내용으로 교체할까요?')) return
+        if (saved.members?.length)
+          setMembers(
+            saved.members.map((member) => ({
+              ...member,
+              totalCredits: member.totalCredits ?? member.remainingCredits,
+            })),
+          )
+        if (saved.classes?.length) setClasses(saved.classes)
+        if (saved.passTemplates?.length) setPassTemplates(saved.passTemplates)
+        if (saved.attendance) setAttendance(saved.attendance)
+        window.alert('가져오기가 완료됐습니다.')
+      } catch {
+        window.alert('파일을 읽을 수 없습니다. 이 앱에서 내보낸 백업 파일인지 확인해 주세요.')
+      }
+    }
+    reader.readAsText(file)
+  }
+
   function updatePayment(memberId: string, formData: FormData) {
     setMembers((current) =>
       current.map((member) =>
@@ -657,8 +793,11 @@ function App() {
         <HomeView
           activeCount={activeMembers.length}
           consultationCount={consultationMembers.length}
-          expiringMembers={expiringMembers}
+          expiringMembers={expiringOnly}
+          lowCreditMembers={lowCreditMembers}
           members={members}
+          onExport={exportData}
+          onImport={importData}
           setTab={setTab}
           todayClasses={todayClasses}
           unpaidMembers={unpaidMembers}
@@ -671,6 +810,7 @@ function App() {
           classes={classes}
           members={members}
           onMarkAttendance={markAttendance}
+          onRemoveClass={removeClass}
           onUpdateClass={updateClass}
         />
       )}
@@ -678,10 +818,14 @@ function App() {
         <MembersView
           attendance={attendance}
           classes={classes}
+          convertedMemberId={convertedMemberId}
           members={members}
           passTemplates={passTemplates}
           onAddMember={addMember}
           onAddPassTemplate={addPassTemplate}
+          onConvertHandled={() => setConvertedMemberId(null)}
+          onRemoveMember={removeMember}
+          onRemovePassTemplate={removePassTemplate}
           onUpdateMember={updateMember}
           query={query}
           setQuery={setQuery}
@@ -691,6 +835,7 @@ function App() {
         <ConsultationsView
           consultationMembers={consultationMembers}
           onAddConsultation={addConsultation}
+          onConvertMember={convertToMember}
           waitlistMembers={waitlistMembers}
         />
       )}
@@ -701,6 +846,7 @@ function App() {
           attendanceDate={attendanceDate}
           classMembers={classMembers}
           classes={classes}
+          onMarkAllPresent={markAllPresent}
           selectedClass={selectedClass}
           selectedClassId={selectedClassId}
           setAttendanceDate={setAttendanceDate}
@@ -709,7 +855,12 @@ function App() {
         />
       )}
       {tab === 'payments' && (
-        <PaymentsView classes={classes} members={activeMembers} updatePayment={updatePayment} />
+        <PaymentsView
+          classes={classes}
+          members={activeMembers}
+          onQuickRenew={quickRenew}
+          updatePayment={updatePayment}
+        />
       )}
 
       {fabDrawerId && (
@@ -769,7 +920,10 @@ function HomeView({
   activeCount,
   consultationCount,
   expiringMembers,
+  lowCreditMembers,
   members,
+  onExport,
+  onImport,
   setTab,
   todayClasses,
   unpaidMembers,
@@ -778,7 +932,10 @@ function HomeView({
   activeCount: number
   consultationCount: number
   expiringMembers: Member[]
+  lowCreditMembers: Member[]
   members: Member[]
+  onExport: () => void
+  onImport: (file: File) => void
   setTab: (tab: Tab) => void
   todayClasses: DanceClass[]
   unpaidMembers: Member[]
@@ -887,6 +1044,20 @@ function HomeView({
               </a>
             </article>
           ))}
+          {lowCreditMembers.map((member) => (
+            <article className="taskRow warn" key={member.id}>
+              <div className="taskAvatar">{member.name.slice(0, 1)}</div>
+              <div className="taskBody">
+                <strong>{member.name}</strong>
+                <span>
+                  잔여 {member.remainingCredits}/{member.totalCredits}회 · 재결제 안내 필요
+                </span>
+              </div>
+              <a className="callButton" href={`tel:${member.phone}`} aria-label={`${member.name} 전화`}>
+                <PhoneCall size={17} />
+              </a>
+            </article>
+          ))}
           {expiringMembers.map((member) => (
             <article className="taskRow warn" key={member.id}>
               <div className="taskAvatar">{member.name.slice(0, 1)}</div>
@@ -899,9 +1070,34 @@ function HomeView({
               </a>
             </article>
           ))}
-          {!unpaidMembers.length && !expiringMembers.length && (
+          {!unpaidMembers.length && !expiringMembers.length && !lowCreditMembers.length && (
             <p className="emptyText">긴급 확인 항목이 없습니다.</p>
           )}
+        </div>
+      </section>
+
+      <section className="panel">
+        <h2>데이터 백업</h2>
+        <p className="hint ruleHint">
+          모든 데이터는 이 기기에만 저장됩니다. 폰을 바꾸거나 브라우저 데이터를 지우면 사라지니
+          주기적으로 파일로 내보내 두세요.
+        </p>
+        <div className="split backupActions">
+          <button type="button" className="secondaryButton" onClick={onExport}>
+            파일로 내보내기
+          </button>
+          <label className="secondaryButton importButton">
+            백업 가져오기
+            <input
+              type="file"
+              accept="application/json,.json"
+              onChange={(event) => {
+                const file = event.target.files?.[0]
+                if (file) onImport(file)
+                event.target.value = ''
+              }}
+            />
+          </label>
         </div>
       </section>
     </section>
@@ -913,6 +1109,7 @@ function ScheduleView({
   classes,
   members,
   onMarkAttendance,
+  onRemoveClass,
   onUpdateClass,
 }: {
   attendance: AttendanceBook
@@ -924,6 +1121,7 @@ function ScheduleView({
     memberId: string,
     status: AttendanceStatus,
   ) => void
+  onRemoveClass: (classId: string) => void
   onUpdateClass: (classId: string, formData: FormData) => void
 }) {
   const weekDates = getWeekDates(today)
@@ -1152,6 +1350,21 @@ function ScheduleView({
                   </select>
                 </Field>
                 <button type="submit" className="secondaryButton">수정 저장</button>
+                <button
+                  type="button"
+                  className="dangerButton"
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        `'${danceClass.name}' 수업을 삭제할까요? 배정된 회원은 수업 미지정 상태가 됩니다.`,
+                      )
+                    ) {
+                      onRemoveClass(danceClass.id)
+                    }
+                  }}
+                >
+                  수업 삭제
+                </button>
               </form>
             </details>
           ))}
@@ -1164,26 +1377,38 @@ function ScheduleView({
 function MembersView({
   attendance,
   classes,
+  convertedMemberId,
   members,
   passTemplates,
   onAddMember,
   onAddPassTemplate,
+  onConvertHandled,
+  onRemoveMember,
+  onRemovePassTemplate,
   onUpdateMember,
   query,
   setQuery,
 }: {
   attendance: AttendanceBook
   classes: DanceClass[]
+  convertedMemberId: string | null
   members: Member[]
   passTemplates: PassTemplate[]
   onAddMember: (formData: FormData) => void
   onAddPassTemplate: (formData: FormData) => void
+  onConvertHandled: () => void
+  onRemoveMember: (memberId: string) => void
+  onRemovePassTemplate: (passId: string) => void
   onUpdateMember: (memberId: string, formData: FormData) => void
   query: string
   setQuery: (query: string) => void
 }) {
   const [memberFilter, setMemberFilter] = useState<MemberStatus>('active')
-  const [editingMemberId, setEditingMemberId] = useState<string | null>(null)
+  const [editingMemberId, setEditingMemberId] = useState<string | null>(convertedMemberId)
+
+  useEffect(() => {
+    if (convertedMemberId) onConvertHandled()
+  }, [convertedMemberId, onConvertHandled])
   const categories: Array<{ label: string; status: MemberStatus }> = [
     { label: '등록한 사람', status: 'active' },
     { label: '상담만 한 사람', status: 'prospect' },
@@ -1294,6 +1519,31 @@ function MembersView({
             <option>전체</option>
           </select>
         </Field>
+        {passTemplates.length > 0 && (
+          <div className="field">
+            <span>만든 수강권</span>
+            <div className="passList">
+              {passTemplates.map((pass) => (
+                <div className="passListItem" key={pass.id}>
+                  <span>
+                    {passCategoryLabel(pass.type)} · {pass.name}
+                    {pass.sessionCount > 0 && ` (${pass.sessionCount}회)`}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm(`'${pass.name}' 수강권을 삭제할까요? 이미 등록된 회원에게는 영향이 없습니다.`)) {
+                        onRemovePassTemplate(pass.id)
+                      }
+                    }}
+                  >
+                    삭제
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </FormDrawer>
 
       <FormDrawer id="drawer-member" title="등록 회원 추가" hint="새 회원의 기본 정보와 결제 내역을 입력" action={onAddMember}>
@@ -1563,6 +1813,21 @@ function MembersView({
                     />
                   </Field>
                   <button type="submit" className="secondaryButton">회원 정보 저장</button>
+                  <button
+                    type="button"
+                    className="dangerButton"
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          `${member.name}님을 삭제할까요? 출석 기록도 함께 삭제되며 되돌릴 수 없습니다.`,
+                        )
+                      ) {
+                        onRemoveMember(member.id)
+                      }
+                    }}
+                  >
+                    회원 삭제
+                  </button>
                 </form>
                 </>
                 )}
@@ -1580,10 +1845,12 @@ function ConsultationsView({
   consultationMembers,
   waitlistMembers,
   onAddConsultation,
+  onConvertMember,
 }: {
   consultationMembers: Member[]
   waitlistMembers: Member[]
   onAddConsultation: (formData: FormData) => void
+  onConvertMember: (memberId: string) => void
 }) {
   const followUpMembers = [...consultationMembers, ...waitlistMembers].sort((a, b) =>
     (b.consultedAt ?? '').localeCompare(a.consultedAt ?? ''),
@@ -1648,6 +1915,21 @@ function ConsultationsView({
                 <span>{member.consultedAt ?? '상담일 없음'} · {member.interest || '관심 수업 미정'}</span>
                 <p>{member.note || '상담 메모 없음'}</p>
               </div>
+              <button
+                type="button"
+                className="convertButton"
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      `${member.name}님을 등록 회원으로 전환할까요? 전환 후 회원 탭에서 수업과 수강권을 지정해 주세요.`,
+                    )
+                  ) {
+                    onConvertMember(member.id)
+                  }
+                }}
+              >
+                등록 회원으로 전환
+              </button>
             </article>
           ))}
           {!followUpMembers.length && <p className="emptyText">등록된 상담 내역이 없습니다.</p>}
@@ -1663,6 +1945,7 @@ function AttendanceView({
   attendanceDate,
   classMembers,
   classes,
+  onMarkAllPresent,
   selectedClass,
   selectedClassId,
   setAttendanceDate,
@@ -1674,6 +1957,7 @@ function AttendanceView({
   attendanceDate: string
   classMembers: Member[]
   classes: DanceClass[]
+  onMarkAllPresent: () => void
   selectedClass: DanceClass | undefined
   selectedClassId: string
   setAttendanceDate: (date: string) => void
@@ -1760,6 +2044,11 @@ function AttendanceView({
 
       <section className="panel">
         <h2>수강 회원</h2>
+        {summary.unchecked > 0 && (
+          <button type="button" className="markAllButton" onClick={onMarkAllPresent}>
+            미체크 {summary.unchecked}명 전체 출석 처리
+          </button>
+        )}
         <div className="listStack">
           {classMembers.map((member) => {
             const status = attendance[attendanceKey(attendanceDate, selectedClassId, member.id)]
@@ -1862,10 +2151,12 @@ function AttendanceView({
 function PaymentsView({
   classes,
   members,
+  onQuickRenew,
   updatePayment,
 }: {
   classes: DanceClass[]
   members: Member[]
+  onQuickRenew: (memberId: string) => void
   updatePayment: (memberId: string, formData: FormData) => void
 }) {
   const [statusFilter, setStatusFilter] = useState<PaymentStatus | 'all'>('all')
@@ -1938,6 +2229,25 @@ function PaymentsView({
                   <span>최근 결제 <b>{member.lastPaidAt || '-'}</b></span>
                   <span>다음 결제 <b>{member.nextPaymentDue || '-'}</b></span>
                 </div>
+                <button
+                  type="button"
+                  className="renewButton"
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        `${member.name}님 재결제 처리할까요?\n· 결제일: 오늘\n· 다음 결제: 30일 뒤${
+                          member.totalCredits > 0
+                            ? `\n· 잔여횟수: ${member.totalCredits}회로 초기화`
+                            : ''
+                        }`,
+                      )
+                    ) {
+                      onQuickRenew(member.id)
+                    }
+                  }}
+                >
+                  재결제 받음 (완납 처리)
+                </button>
                 <details className="paymentEditor">
                   <summary>결제 정보 수정</summary>
                   <form
