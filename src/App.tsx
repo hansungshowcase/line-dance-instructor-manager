@@ -56,6 +56,7 @@ type Member = {
   classIds: string[]
   passType: string
   remainingCredits: number
+  totalCredits: number
   paidAmount: number
   lastPaidAt: string
   nextPaymentDue: string
@@ -148,6 +149,7 @@ const seedMembers: Member[] = [
     classIds: ['class-beginner-mon'],
     passType: '월회비',
     remainingCredits: 0,
+    totalCredits: 0,
     paidAmount: 90000,
     lastPaidAt: addDays(-21),
     nextPaymentDue: addDays(9),
@@ -164,6 +166,7 @@ const seedMembers: Member[] = [
     classIds: ['class-intermediate-evening'],
     passType: '10회권',
     remainingCredits: 3,
+    totalCredits: 10,
     paidAmount: 120000,
     lastPaidAt: addDays(-18),
     nextPaymentDue: addDays(21),
@@ -180,6 +183,7 @@ const seedMembers: Member[] = [
     classIds: ['class-beginner-mon'],
     passType: '월회비',
     remainingCredits: 0,
+    totalCredits: 0,
     paidAmount: 0,
     lastPaidAt: addDays(-34),
     nextPaymentDue: addDays(-2),
@@ -196,6 +200,7 @@ const seedMembers: Member[] = [
     classIds: [],
     passType: '상담',
     remainingCredits: 0,
+    totalCredits: 0,
     paidAmount: 0,
     lastPaidAt: '',
     nextPaymentDue: '',
@@ -214,6 +219,7 @@ const seedMembers: Member[] = [
     classIds: [],
     passType: '대기',
     remainingCredits: 0,
+    totalCredits: 0,
     paidAmount: 0,
     lastPaidAt: '',
     nextPaymentDue: '',
@@ -260,10 +266,7 @@ function formatCurrency(amount: number) {
 
 function daysUntil(dateKey: string) {
   if (!dateKey) return null
-  return Math.max(
-    0,
-    Math.ceil((new Date(dateKey).getTime() - today.getTime()) / 86400000),
-  )
+  return Math.ceil((new Date(dateKey).getTime() - today.getTime()) / 86400000)
 }
 
 function startOfWeek(date: Date) {
@@ -314,12 +317,18 @@ function useStoredData() {
     if (!raw) return
     try {
       const saved = JSON.parse(raw) as {
-        members?: Member[]
+        members?: Array<Omit<Member, 'totalCredits'> & { totalCredits?: number }>
         classes?: DanceClass[]
         passTemplates?: PassTemplate[]
         attendance?: AttendanceBook
       }
-      if (saved.members?.length) setMembers(saved.members)
+      if (saved.members?.length)
+        setMembers(
+          saved.members.map((member) => ({
+            ...member,
+            totalCredits: member.totalCredits ?? member.remainingCredits,
+          })),
+        )
       if (saved.classes?.length) setClasses(saved.classes)
       if (saved.passTemplates?.length) setPassTemplates(saved.passTemplates)
       if (saved.attendance) setAttendance(saved.attendance)
@@ -373,11 +382,12 @@ function App() {
   const todayClasses = classes.filter((item) => item.weekday === today.getDay())
   const unpaidMembers = activeMembers.filter((member) => member.paymentStatus === 'unpaid')
   const expiringMembers = activeMembers.filter((member) => {
+    if (member.paymentStatus === 'unpaid') return false
     const dueDate = new Date(member.nextPaymentDue || member.passUntil)
     const daysLeft = Math.ceil((dueDate.getTime() - today.getTime()) / 86400000)
     return daysLeft <= 10
   })
-  const selectedClass = classes.find((item) => item.id === selectedClassId)
+  const selectedClass = classes.find((item) => item.id === selectedClassId) ?? classes[0]
   const classMembers = selectedClass
     ? activeMembers.filter((member) => member.classIds.includes(selectedClass.id))
     : []
@@ -431,6 +441,9 @@ function App() {
         classIds: assignedClassIds,
         passType: selectedPass?.name ?? String(formData.get('passType') ?? '월회비'),
         remainingCredits: Number(
+          formData.get('remainingCredits') || selectedPass?.sessionCount || 0,
+        ),
+        totalCredits: Number(
           formData.get('remainingCredits') || selectedPass?.sessionCount || 0,
         ),
         paidAmount: Number(
@@ -504,11 +517,12 @@ function App() {
               phone: String(formData.get('phone') ?? member.phone),
               level: String(formData.get('level') ?? member.level),
               status: String(formData.get('status') ?? member.status) as MemberStatus,
-              classIds: classId ? [classId] : member.classIds,
+              classIds: classId ? [classId] : [],
               passType: String(formData.get('passType') ?? member.passType),
               remainingCredits: Number(
                 formData.get('remainingCredits') ?? member.remainingCredits,
               ),
+              totalCredits: Number(formData.get('totalCredits') ?? member.totalCredits),
               paidAmount: Number(formData.get('paidAmount') ?? member.paidAmount),
               lastPaidAt: String(formData.get('lastPaidAt') ?? member.lastPaidAt),
               nextPaymentDue: String(
@@ -538,6 +552,7 @@ function App() {
         classIds: [],
         passType: '상담',
         remainingCredits: 0,
+        totalCredits: 0,
         paidAmount: 0,
         lastPaidAt: '',
         nextPaymentDue: '',
@@ -577,6 +592,28 @@ function App() {
     memberId: string,
     status: AttendanceStatus,
   ) {
+    const previous = attendance[attendanceKey(date, classId, memberId)]
+    if (previous !== status) {
+      // 출석·보강은 잔여횟수를 1회 차감하고, 결석·미체크로 바꾸면 복구한다 (회수권 회원만)
+      const wasCounted = previous === 'present' || previous === 'makeup'
+      const willCount = status === 'present' || status === 'makeup'
+      const delta = (wasCounted ? 1 : 0) - (willCount ? 1 : 0)
+      if (delta !== 0) {
+        setMembers((current) =>
+          current.map((member) =>
+            member.id === memberId && member.totalCredits > 0
+              ? {
+                  ...member,
+                  remainingCredits: Math.min(
+                    member.totalCredits,
+                    Math.max(0, member.remainingCredits + delta),
+                  ),
+                }
+              : member,
+          ),
+        )
+      }
+    }
     setAttendance((current) => ({
       ...current,
       [attendanceKey(date, classId, memberId)]: status,
@@ -601,6 +638,7 @@ function App() {
               remainingCredits: Number(
                 formData.get('remainingCredits') ?? member.remainingCredits,
               ),
+              totalCredits: Number(formData.get('totalCredits') ?? member.totalCredits),
               paidAmount: Number(formData.get('paidAmount') ?? member.paidAmount),
               lastPaidAt: String(formData.get('lastPaidAt') ?? member.lastPaidAt),
               nextPaymentDue: String(
@@ -891,7 +929,10 @@ function ScheduleView({
   const weekDates = getWeekDates(today)
   const monthDates = getMonthDates(today)
   const [selectedDate, setSelectedDate] = useState(today)
-  const hourRows = Array.from({ length: endHour - startHour + 1 }, (_, index) => startHour + index)
+  const classHours = classes.map((danceClass) => hourFromTime(danceClass.startTime))
+  const firstHour = classHours.length ? Math.min(startHour, ...classHours) : startHour
+  const lastHour = classHours.length ? Math.max(endHour, ...classHours) : endHour
+  const hourRows = Array.from({ length: lastHour - firstHour + 1 }, (_, index) => firstHour + index)
   const selectedWeekday = selectedDate.getDay()
   const selectedDateKey = toDateKey(selectedDate)
   const classColorIndex = new Map(classes.map((danceClass, index) => [danceClass.id, index % 6]))
@@ -928,7 +969,7 @@ function ScheduleView({
           })}
         </div>
 
-        <div className="timelineTitle">
+        <div className="timelineTitle" id="timeline-view">
           <strong>10시 이후 시간대별 보기</strong>
           <span>{weekdays[selectedWeekday]}요일 {formatMonthDay(selectedDate)} 수업만 보기</span>
         </div>
@@ -1021,7 +1062,12 @@ function ScheduleView({
                   className={`${date.getMonth() !== today.getMonth() ? 'outside' : ''} ${
                     dateKey === todayKey ? 'today' : ''
                   } ${dateKey === selectedDateKey ? 'selected' : ''}`}
-                  onClick={() => setSelectedDate(date)}
+                  onClick={() => {
+                    setSelectedDate(date)
+                    document
+                      .getElementById('timeline-view')
+                      ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                  }}
                   key={dateKey}
                 >
                   <b>{date.getDate()}</b>
@@ -1297,13 +1343,13 @@ function MembersView({
               <option>기간권</option>
             </select>
           </Field>
-          <Field label="잔여 횟수">
-            <input name="remainingCredits" type="number" min="0" defaultValue="0" />
+          <Field label="총 횟수">
+            <input name="remainingCredits" type="number" min="0" placeholder="수강권 선택 시 자동" />
           </Field>
         </div>
         <div className="split">
           <Field label="결제 금액">
-            <input name="paidAmount" type="number" min="0" defaultValue="90000" />
+            <input name="paidAmount" type="number" min="0" placeholder="수강권 기준 자동" />
           </Field>
           <Field label="최근 결제일">
             <input name="lastPaidAt" type="date" defaultValue={todayKey} />
@@ -1379,11 +1425,21 @@ function MembersView({
                     <dl className="memberFacts">
                       <div>
                         <dt>잔여기간</dt>
-                        <dd>{dueDays === null ? '-' : `${dueDays}일 남음`}</dd>
+                        <dd className={dueDays !== null && dueDays < 0 ? 'unpaid' : ''}>
+                          {dueDays === null
+                            ? '-'
+                            : dueDays < 0
+                              ? `${Math.abs(dueDays)}일 지남`
+                              : `${dueDays}일 남음`}
+                        </dd>
                       </div>
                       <div>
                         <dt>잔여횟수</dt>
-                        <dd>{member.remainingCredits}회 남음</dd>
+                        <dd>
+                          {member.totalCredits > 0
+                            ? `${member.remainingCredits}/${member.totalCredits}회 남음`
+                            : '기간제 (횟수 제한 없음)'}
+                        </dd>
                       </div>
                       <div>
                         <dt>최근 출석일</dt>
@@ -1472,24 +1528,29 @@ function MembersView({
                     </Field>
                   </div>
                   <div className="split">
+                    <Field label="총 횟수">
+                      <input name="totalCredits" type="number" min="0" defaultValue={member.totalCredits} />
+                    </Field>
                     <Field label="잔여 횟수">
                       <input name="remainingCredits" type="number" min="0" defaultValue={member.remainingCredits} />
                     </Field>
+                  </div>
+                  <div className="split">
                     <Field label="결제 금액">
                       <input name="paidAmount" type="number" min="0" defaultValue={member.paidAmount} />
                     </Field>
-                  </div>
-                  <div className="split">
                     <Field label="최근 결제일">
                       <input name="lastPaidAt" type="date" defaultValue={member.lastPaidAt || todayKey} />
                     </Field>
+                  </div>
+                  <div className="split">
                     <Field label="다음 결제일">
                       <input name="nextPaymentDue" type="date" defaultValue={member.nextPaymentDue || addDays(30)} />
                     </Field>
+                    <Field label="수강 만료일">
+                      <input name="passUntil" type="date" defaultValue={member.passUntil || addDays(30)} />
+                    </Field>
                   </div>
-                  <Field label="수강 만료일">
-                    <input name="passUntil" type="date" defaultValue={member.passUntil || addDays(30)} />
-                  </Field>
                   <Field label="관심 수업 / 상담 주제">
                     <input name="interest" defaultValue={member.interest ?? ''} placeholder="관심 수업 / 상담 주제" />
                   </Field>
@@ -1691,6 +1752,10 @@ function AttendanceView({
           <span className="warn">보강 {summary.makeup}</span>
           <span>미체크 {summary.unchecked}</span>
         </div>
+        <p className="hint ruleHint">
+          출석·보강 체크 시 회수권 잔여횟수가 1회 차감되고, 결석·미체크로 바꾸면 복구됩니다.
+          결석은 횟수가 차감되지 않아요.
+        </p>
       </section>
 
       <section className="panel">
@@ -1704,6 +1769,8 @@ function AttendanceView({
                   <strong>{member.name}</strong>
                   <span className={status ? `state-${status}` : ''}>
                     {status ? attendanceLabel(status) : '미체크'}
+                    {member.totalCredits > 0 &&
+                      ` · 잔여 ${member.remainingCredits}/${member.totalCredits}회`}
                   </span>
                 </div>
                 <div className="segmented">
@@ -1742,23 +1809,49 @@ function AttendanceView({
           출석 기록은 이 기기(브라우저)에 자동 저장되어 앱을 껐다 켜도 유지됩니다.
         </p>
         <div className="listStack">
-          {memberStats.map(({ absent, lastPresent, makeup, member, monthPresent, present }) => (
-            <article className="memberStatRow" key={member.id}>
-              <div className="taskAvatar">{member.name.slice(0, 1)}</div>
-              <div className="statBody">
-                <strong>{member.name}</strong>
-                <span>
-                  이번 달 출석 <b>{monthPresent}회</b> · 마지막 출석 {lastPresent || '기록 없음'}
-                </span>
-              </div>
-              <div className="statChips">
-                <b className="ok">출석 {present}</b>
-                <b className="danger">결석 {absent}</b>
-                <b className="warn">보강 {makeup}</b>
-                {member.remainingCredits > 0 && <b>잔여 {member.remainingCredits}회</b>}
-              </div>
-            </article>
-          ))}
+          {memberStats.map(({ absent, lastPresent, makeup, member, monthPresent, present }) => {
+            const usedCredits = Math.max(0, member.totalCredits - member.remainingCredits)
+            const passDays = daysUntil(member.passUntil)
+            return (
+              <article className="memberStatRow" key={member.id}>
+                <div className="taskAvatar">{member.name.slice(0, 1)}</div>
+                <div className="statBody">
+                  <strong>{member.name}</strong>
+                  <span>
+                    {member.passType}
+                    {member.totalCredits > 0
+                      ? <> · 잔여 <b>{member.remainingCredits}/{member.totalCredits}회</b></>
+                      : passDays !== null
+                        ? <> · 만료까지 <b>{passDays < 0 ? `${Math.abs(passDays)}일 지남` : `${passDays}일`}</b></>
+                        : null}
+                  </span>
+                </div>
+                {member.totalCredits > 0 && (
+                  <div
+                    className="statProgress"
+                    role="progressbar"
+                    aria-label={`${member.name} 수강권 사용 현황`}
+                    aria-valuemin={0}
+                    aria-valuemax={member.totalCredits}
+                    aria-valuenow={usedCredits}
+                  >
+                    <i
+                      style={{
+                        width: `${Math.min(100, Math.round((usedCredits / member.totalCredits) * 100))}%`,
+                      }}
+                    />
+                  </div>
+                )}
+                <div className="statChips">
+                  <b className="ok">출석 {present}</b>
+                  <b className="warn">보강 {makeup}</b>
+                  <b className="danger">결석 {absent} (차감 없음)</b>
+                  <b>이번 달 {monthPresent}회</b>
+                  <b>{lastPresent ? `최근 출석 ${lastPresent.slice(5).replace('-', '/')}` : '출석 기록 없음'}</b>
+                </div>
+              </article>
+            )
+          })}
           {!memberStats.length && <p className="emptyText">등록된 회원이 없습니다.</p>}
         </div>
       </section>
@@ -1833,7 +1926,14 @@ function PaymentsView({
                   <b className={member.paymentStatus}>{paymentLabel(member.paymentStatus)}</b>
                 </div>
                 <div className="paymentSummary">
-                  <span>남은 횟수 <b>{member.remainingCredits}회</b></span>
+                  <span>
+                    남은 횟수{' '}
+                    <b>
+                      {member.totalCredits > 0
+                        ? `${member.remainingCredits}/${member.totalCredits}회`
+                        : '기간제'}
+                    </b>
+                  </span>
                   <span>결제 금액 <b>{formatCurrency(member.paidAmount)}</b></span>
                   <span>최근 결제 <b>{member.lastPaidAt || '-'}</b></span>
                   <span>다음 결제 <b>{member.nextPaymentDue || '-'}</b></span>
@@ -1860,6 +1960,9 @@ function PaymentsView({
                         <option>10회권</option>
                         <option>기간권</option>
                       </select>
+                    </Field>
+                    <Field label="총 횟수">
+                      <input name="totalCredits" type="number" min="0" defaultValue={member.totalCredits} />
                     </Field>
                     <Field label="잔여 횟수">
                       <input name="remainingCredits" type="number" min="0" defaultValue={member.remainingCredits} />

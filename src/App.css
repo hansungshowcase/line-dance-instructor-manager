@@ -694,16 +694,22 @@
 }
 
 .monthGrid button {
-  min-height: 64px;
+  height: 72px;
   display: flex;
   flex-direction: column;
   gap: 3px;
   align-items: flex-start;
+  overflow: hidden;
   border-right: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
   background: var(--panel);
   color: var(--ink);
   padding: 6px 3px;
+}
+
+.eventChip,
+.moreChip {
+  flex: 0 0 auto;
 }
 
 .monthGrid button:nth-child(7n) {
@@ -1523,6 +1529,27 @@ button {
 .statBody span b {
   color: var(--primary);
   font-weight: 700;
+}
+
+.statProgress {
+  grid-column: 1 / -1;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--soft);
+  overflow: hidden;
+}
+
+.statProgress i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--grad);
+  transition: width 0.25s ease;
+}
+
+.ruleHint {
+  margin: 10px 0 0;
+  line-height: 1.5;
 }
 
 .statChips {
