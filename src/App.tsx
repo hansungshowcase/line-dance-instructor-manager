@@ -226,7 +226,10 @@ const seedMembers: Member[] = [
 ]
 
 function toDateKey(date: Date) {
-  return date.toISOString().slice(0, 10)
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 function addDays(days: number) {
@@ -380,7 +383,7 @@ function App() {
     : []
   const fabDrawerId = {
     home: null,
-    schedule: 'drawer-class',
+    schedule: null,
     members: 'drawer-member',
     consultations: 'drawer-consult',
     attendance: null,
@@ -548,25 +551,6 @@ function App() {
     ])
   }
 
-  function addClass(formData: FormData) {
-    const name = String(formData.get('name') ?? '').trim()
-    if (!name) return
-    setClasses((current) => [
-      {
-        id: makeId('class'),
-        name,
-        weekday: Number(formData.get('weekday') ?? 1),
-        startTime: String(formData.get('startTime') ?? '10:00'),
-        endTime: String(formData.get('endTime') ?? '10:50'),
-        location: String(formData.get('location') ?? '스튜디오'),
-        capacity: Number(formData.get('capacity') ?? 12),
-        tuitionFee: Number(formData.get('tuitionFee') ?? 0),
-        level: String(formData.get('level') ?? '초급'),
-      },
-      ...current,
-    ])
-  }
-
   function updateClass(classId: string, formData: FormData) {
     setClasses((current) =>
       current.map((danceClass) =>
@@ -648,7 +632,6 @@ function App() {
           attendance={attendance}
           classes={classes}
           members={members}
-          onAddClass={addClass}
           onMarkAttendance={markAttendance}
           onUpdateClass={updateClass}
         />
@@ -891,14 +874,12 @@ function ScheduleView({
   attendance,
   classes,
   members,
-  onAddClass,
   onMarkAttendance,
   onUpdateClass,
 }: {
   attendance: AttendanceBook
   classes: DanceClass[]
   members: Member[]
-  onAddClass: (formData: FormData) => void
   onMarkAttendance: (
     date: string,
     classId: string,
@@ -913,6 +894,7 @@ function ScheduleView({
   const hourRows = Array.from({ length: endHour - startHour + 1 }, (_, index) => startHour + index)
   const selectedWeekday = selectedDate.getDay()
   const selectedDateKey = toDateKey(selectedDate)
+  const classColorIndex = new Map(classes.map((danceClass, index) => [danceClass.id, index % 6]))
 
   return (
     <section className="screen">
@@ -1044,59 +1026,20 @@ function ScheduleView({
                 >
                   <b>{date.getDate()}</b>
                   {dayClasses.slice(0, 2).map((danceClass) => (
-                    <span key={danceClass.id}>{danceClass.startTime}</span>
+                    <span
+                      className={`eventChip chip-${classColorIndex.get(danceClass.id) ?? 0}`}
+                      key={danceClass.id}
+                    >
+                      {danceClass.name}
+                    </span>
                   ))}
+                  {dayClasses.length > 2 && <i className="moreChip">+{dayClasses.length - 2}</i>}
                 </button>
               )
             })}
           </div>
         </div>
       </section>
-
-      <FormDrawer id="drawer-class" title="수업반 추가" hint="요일·시간·수강료를 정해 새 수업을 만듭니다" action={onAddClass}>
-        <Field label="수업 이름">
-          <input name="name" placeholder="예: 초급 라인댄스" required />
-        </Field>
-        <div className="split">
-          <Field label="요일">
-            <select name="weekday" defaultValue={today.getDay()}>
-              {weekdays.map((day, index) => (
-                <option value={index} key={day}>
-                  {day}요일
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="정원">
-            <input name="capacity" type="number" min="1" defaultValue="12" />
-          </Field>
-        </div>
-        <div className="split">
-          <Field label="시작 시간">
-            <input name="startTime" type="time" defaultValue="10:00" />
-          </Field>
-          <Field label="종료 시간">
-            <input name="endTime" type="time" defaultValue="10:50" />
-          </Field>
-        </div>
-        <div className="split">
-          <Field label="장소">
-            <input name="location" placeholder="장소" defaultValue="스튜디오" />
-          </Field>
-          <Field label="수강료">
-            <input name="tuitionFee" type="number" min="0" defaultValue="90000" />
-          </Field>
-        </div>
-        <Field label="레벨">
-          <select name="level" defaultValue="초급">
-            <option>입문</option>
-            <option>초급</option>
-            <option>중급</option>
-            <option>고급</option>
-            <option>전체</option>
-          </select>
-        </Field>
-      </FormDrawer>
 
       <section className="panel">
         <h2>수업반 수정</h2>

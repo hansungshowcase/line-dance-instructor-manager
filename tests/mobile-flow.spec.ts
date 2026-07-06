@@ -31,6 +31,16 @@ test('instructor can manage classes, members, attendance, and payment details', 
   await memberDrawer.locator('input[name="note"]').fill('오전반 신규')
   await page.getByRole('button', { name: '추가' }).click()
   await expect(page.locator('.memberLookupCard').filter({ hasText: '최하은' })).toBeVisible()
+
+  // 새 수강권을 만들면 등록 회원 추가 폼의 수강권 목록에 즉시 반영되어야 한다
+  const passDrawer = page.locator('details.formDrawer').filter({ hasText: '수강권 만들기' })
+  await passDrawer.locator('summary').click()
+  await passDrawer.locator('input[name="name"]').fill('야간 라틴 8회')
+  await passDrawer.getByRole('button', { name: '수강권 저장' }).click()
+  await expect(
+    memberDrawer.locator('select[name="passTemplateId"] option', { hasText: '야간 라틴 8회' }),
+  ).toHaveCount(1)
+  await passDrawer.locator('summary').click()
   await page.locator('.memberLookupCard').filter({ hasText: '최하은' }).locator('.editMemberButton').click()
   await expect(page.getByText('₩95,000').first()).toBeVisible()
   await page.locator('.memberLookupCard').filter({ hasText: '최하은' }).locator('textarea[name="note"]').fill('첫 상담 완료, 다음 주 등록 예정')

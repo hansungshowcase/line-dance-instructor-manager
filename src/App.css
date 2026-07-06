@@ -694,7 +694,7 @@
 }
 
 .monthGrid button {
-  min-height: 56px;
+  min-height: 64px;
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -703,7 +703,7 @@
   border-bottom: 1px solid var(--line);
   background: var(--panel);
   color: var(--ink);
-  padding: 6px 5px;
+  padding: 6px 3px;
 }
 
 .monthGrid button:nth-child(7n) {
@@ -713,24 +713,67 @@
 .monthGrid b {
   font-size: 12px;
   font-weight: 600;
+  padding-left: 2px;
 }
 
-.monthGrid span {
+.eventChip {
   width: 100%;
   overflow: hidden;
   border-radius: 4px;
-  background: var(--primary-soft);
-  color: var(--primary-deep);
-  padding: 2px 3px;
+  padding: 2px 4px;
+  text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 9px;
   font-weight: 700;
+  line-height: 1.4;
+}
+
+.chip-0 {
+  background: #e3f3ec;
+  color: #0c6e3c;
+}
+
+.chip-1 {
+  background: #e9edfe;
+  color: #4055c8;
+}
+
+.chip-2 {
+  background: #fdefdc;
+  color: #99610a;
+}
+
+.chip-3 {
+  background: #fdeaf3;
+  color: #b13277;
+}
+
+.chip-4 {
+  background: #efe9fe;
+  color: #6a41cf;
+}
+
+.chip-5 {
+  background: #fbf5d8;
+  color: #8a7104;
+}
+
+.moreChip {
+  color: var(--muted);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 700;
+  padding-left: 2px;
 }
 
 .monthGrid .outside {
   color: #bcc1cd;
   background: #fbfcfe;
+}
+
+.monthGrid .outside .eventChip {
+  opacity: 0.4;
 }
 
 .monthGrid .today b {
