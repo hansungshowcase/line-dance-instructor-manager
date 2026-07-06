@@ -1,10 +1,13 @@
 import {
   CalendarDays,
   CheckCircle2,
+  ChevronRight,
   CircleDollarSign,
   ClipboardList,
   Home,
+  MapPin,
   Phone,
+  PhoneCall,
   Plus,
   Search,
   Settings2,
@@ -292,6 +295,11 @@ function hourFromTime(time: string) {
   return Number(time.split(':')[0] ?? startHour)
 }
 
+function minutesFromTime(time: string) {
+  const [hour, minute] = time.split(':').map(Number)
+  return (hour || 0) * 60 + (minute || 0)
+}
+
 function useStoredData() {
   const [members, setMembers] = useState<Member[]>(seedMembers)
   const [classes, setClasses] = useState<DanceClass[]>(seedClasses)
@@ -370,6 +378,14 @@ function App() {
   const classMembers = selectedClass
     ? activeMembers.filter((member) => member.classIds.includes(selectedClass.id))
     : []
+  const fabDrawerId = {
+    home: null,
+    schedule: 'drawer-class',
+    members: 'drawer-member',
+    consultations: 'drawer-consult',
+    attendance: null,
+    payments: null,
+  }[tab]
 
   function addMember(formData: FormData) {
     const name = String(formData.get('name') ?? '').trim()
@@ -615,14 +631,6 @@ function App() {
 
   return (
     <main className={`appShell tab-${tab}`}>
-      <header className="topBar">
-        <div>
-          <span className="eyebrow">Line Dance Admin</span>
-          <h1>강사용 운영관리</h1>
-        </div>
-        <div className="datePill">{todayKey}</div>
-      </header>
-
       {tab === 'home' && (
         <HomeView
           activeCount={activeMembers.length}
@@ -667,6 +675,7 @@ function App() {
       )}
       {tab === 'attendance' && (
         <AttendanceView
+          allMembers={activeMembers}
           attendance={attendance}
           attendanceDate={attendanceDate}
           classMembers={classMembers}
@@ -680,6 +689,22 @@ function App() {
       )}
       {tab === 'payments' && (
         <PaymentsView classes={classes} members={activeMembers} updatePayment={updatePayment} />
+      )}
+
+      {fabDrawerId && (
+        <button
+          type="button"
+          className="fab"
+          aria-label="빠른 등록"
+          onClick={() => {
+            const drawer = document.getElementById(fabDrawerId) as HTMLDetailsElement | null
+            if (!drawer) return
+            drawer.open = true
+            drawer.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          }}
+        >
+          <Plus size={23} />
+        </button>
       )}
 
       <nav className="bottomNav" aria-label="주요 메뉴">
@@ -738,60 +763,120 @@ function HomeView({
   unpaidMembers: Member[]
   waitlistCount: number
 }) {
+  const now = new Date()
+  const nowMinutes = now.getHours() * 60 + now.getMinutes()
+  const sortedToday = [...todayClasses].sort((a, b) => a.startTime.localeCompare(b.startTime))
+  const ongoingClass = sortedToday.find(
+    (item) =>
+      minutesFromTime(item.startTime) <= nowMinutes &&
+      nowMinutes < minutesFromTime(item.endTime),
+  )
+  const upcomingClass = sortedToday.find((item) => minutesFromTime(item.startTime) > nowMinutes)
+  const heroMessage = ongoingClass
+    ? `지금 수업 중 · ${ongoingClass.name} ${ongoingClass.startTime}~${ongoingClass.endTime}`
+    : upcomingClass
+      ? `다음 수업 ${upcomingClass.startTime} · ${upcomingClass.name}`
+      : sortedToday.length
+        ? '오늘 수업이 모두 끝났어요'
+        : '오늘은 예정된 수업이 없어요'
+
   return (
     <section className="screen">
       <section className="heroBand">
-        <div>
-          <p>오늘 수업</p>
-          <strong>{todayClasses.length}개</strong>
-          <span>10시 이후 일정만 집중해서 관리</span>
+        <div className="heroInfo">
+          <p>
+            {today.getMonth() + 1}월 {today.getDate()}일 {weekdays[today.getDay()]}요일
+          </p>
+          <strong>오늘 수업 {todayClasses.length}개</strong>
+          <span>{heroMessage}</span>
         </div>
         <button type="button" onClick={() => setTab('schedule')}>
           시간표 보기
+          <ChevronRight size={15} />
         </button>
       </section>
 
       <div className="metricGrid">
-        <Metric label="등록 회원" value={`${activeCount}명`} />
-        <Metric label="상담만 한 회원" value={`${consultationCount}명`} />
-        <Metric label="현재 대기" value={`${waitlistCount}명`} tone="warn" />
-        <Metric label="미납" value={`${unpaidMembers.length}명`} tone="danger" />
+        <Metric label="등록 회원" value={`${activeCount}명`} onClick={() => setTab('members')} />
+        <Metric
+          label="상담만 한 회원"
+          value={`${consultationCount}명`}
+          onClick={() => setTab('consultations')}
+        />
+        <Metric
+          label="현재 대기"
+          value={`${waitlistCount}명`}
+          tone="warn"
+          onClick={() => setTab('consultations')}
+        />
+        <Metric
+          label="미납"
+          value={`${unpaidMembers.length}명`}
+          tone="danger"
+          onClick={() => setTab('payments')}
+        />
       </div>
 
       <section className="panel">
         <h2>오늘 해야 할 수업</h2>
         <div className="listStack">
-          {todayClasses.map((danceClass) => {
+          {sortedToday.map((danceClass) => {
             const assigned = members.filter((member) =>
               member.classIds.includes(danceClass.id),
             ).length
+            const isLive = ongoingClass?.id === danceClass.id
             return (
-              <article className="rowItem" key={danceClass.id}>
-                <div>
-                  <strong>{danceClass.name}</strong>
-                  <span>{danceClass.startTime} - {danceClass.endTime}</span>
-                  <small>{danceClass.location}</small>
+              <article className={isLive ? 'rowItem live' : 'rowItem'} key={danceClass.id}>
+                <div className="rowTime">
+                  <b>{danceClass.startTime}</b>
+                  <span>{danceClass.endTime}</span>
                 </div>
-                <b>{assigned}/{danceClass.capacity}</b>
+                <div className="rowBody">
+                  <strong>
+                    {danceClass.name}
+                    {isLive && <em className="liveDot">진행 중</em>}
+                  </strong>
+                  <small>
+                    <MapPin size={12} /> {danceClass.location} · {danceClass.level}
+                  </small>
+                </div>
+                <b className="rowCount">
+                  {assigned}
+                  <span>/{danceClass.capacity}</span>
+                </b>
               </article>
             )
           })}
-          {!todayClasses.length && <p className="emptyText">오늘 등록된 수업이 없습니다.</p>}
+          {!sortedToday.length && <p className="emptyText">오늘 등록된 수업이 없습니다.</p>}
         </div>
       </section>
 
       <section className="panel">
         <h2>우선 확인</h2>
-        <div className="alertList">
+        <div className="listStack">
           {unpaidMembers.map((member) => (
-            <span className="alertChip danger" key={member.id}>
-              {member.name} 미납
-            </span>
+            <article className="taskRow danger" key={member.id}>
+              <div className="taskAvatar">{member.name.slice(0, 1)}</div>
+              <div className="taskBody">
+                <strong>{member.name}</strong>
+                <span>회비 미납 · {member.passType}</span>
+              </div>
+              <a className="callButton" href={`tel:${member.phone}`} aria-label={`${member.name} 전화`}>
+                <PhoneCall size={17} />
+              </a>
+            </article>
           ))}
           {expiringMembers.map((member) => (
-            <span className="alertChip warn" key={member.id}>
-              {member.name} 다음 결제 {member.nextPaymentDue || member.passUntil}
-            </span>
+            <article className="taskRow warn" key={member.id}>
+              <div className="taskAvatar">{member.name.slice(0, 1)}</div>
+              <div className="taskBody">
+                <strong>{member.name}</strong>
+                <span>다음 결제 {member.nextPaymentDue || member.passUntil}</span>
+              </div>
+              <a className="callButton" href={`tel:${member.phone}`} aria-label={`${member.name} 전화`}>
+                <PhoneCall size={17} />
+              </a>
+            </article>
           ))}
           {!unpaidMembers.length && !expiringMembers.length && (
             <p className="emptyText">긴급 확인 항목이 없습니다.</p>
@@ -824,9 +909,10 @@ function ScheduleView({
 }) {
   const weekDates = getWeekDates(today)
   const monthDates = getMonthDates(today)
-  const [selectedWeekday, setSelectedWeekday] = useState(today.getDay())
+  const [selectedDate, setSelectedDate] = useState(today)
   const hourRows = Array.from({ length: endHour - startHour + 1 }, (_, index) => startHour + index)
-  const selectedDate = weekDates.find((date) => date.getDay() === selectedWeekday) ?? today
+  const selectedWeekday = selectedDate.getDay()
+  const selectedDateKey = toDateKey(selectedDate)
 
   return (
     <section className="screen">
@@ -842,14 +928,14 @@ function ScheduleView({
         <div className="dayStrip">
           {weekDates.map((date) => {
             const count = classes.filter((item) => item.weekday === date.getDay()).length
-            const isSelected = selectedWeekday === date.getDay()
+            const isSelected = toDateKey(date) === selectedDateKey
             return (
               <button
                 type="button"
                 className={`${toDateKey(date) === todayKey ? 'today' : ''} ${
                   isSelected ? 'selected' : ''
                 }`}
-                onClick={() => setSelectedWeekday(date.getDay())}
+                onClick={() => setSelectedDate(date)}
                 key={toDateKey(date)}
               >
                 <strong>{weekdays[date.getDay()]}</strong>
@@ -877,8 +963,7 @@ function ScheduleView({
               <article className={rowClasses.length ? 'hourRow hasClass' : 'hourRow'} key={hour}>
                 <div className="hourStamp">{hour}:00</div>
                 <div className="hourCards">
-{rowClasses.map((danceClass) => {
-                    const selectedDateKey = toDateKey(selectedDate)
+                  {rowClasses.map((danceClass) => {
                     const assignedMembers = members.filter(
                       (member) =>
                         member.status === 'active' &&
@@ -886,14 +971,16 @@ function ScheduleView({
                     )
                     return (
                       <div className="timeClassCard" key={danceClass.id}>
-                        <div>
-                          <b>{weekdays[danceClass.weekday]}</b>
-                          <strong>{danceClass.name}</strong>
-                          <span>{danceClass.startTime} - {danceClass.endTime}</span>
+                        <div className="timeClassTop">
+                          <div>
+                            <b>{weekdays[danceClass.weekday]}</b>
+                            <strong>{danceClass.name}</strong>
+                            <span>{danceClass.startTime} - {danceClass.endTime}</span>
+                          </div>
+                          <small>
+                            {assignedMembers.length}/{danceClass.capacity}명 · {formatCurrency(danceClass.tuitionFee)}
+                          </small>
                         </div>
-                        <small>
-                          {assignedMembers.length}/{danceClass.capacity}명 · {formatCurrency(danceClass.tuitionFee)}
-                        </small>
                         <div className="scheduleRoster">
                           {assignedMembers.map((member) => {
                             const status =
@@ -933,7 +1020,7 @@ function ScheduleView({
         <div className="monthCalendar">
           <div className="monthCalendarHead">
             <strong>{today.getFullYear()}.{String(today.getMonth() + 1).padStart(2, '0')}</strong>
-            <span>{weekdays[selectedWeekday]}요일 선택됨</span>
+            <span>{formatMonthDay(selectedDate)} {weekdays[selectedWeekday]}요일 선택됨</span>
           </div>
           <div className="monthWeekdays">
             {weekdays.map((day) => (
@@ -951,8 +1038,8 @@ function ScheduleView({
                   type="button"
                   className={`${date.getMonth() !== today.getMonth() ? 'outside' : ''} ${
                     dateKey === todayKey ? 'today' : ''
-                  } ${date.getDay() === selectedWeekday ? 'selected' : ''}`}
-                  onClick={() => setSelectedWeekday(date.getDay())}
+                  } ${dateKey === selectedDateKey ? 'selected' : ''}`}
+                  onClick={() => setSelectedDate(date)}
                   key={dateKey}
                 >
                   <b>{date.getDate()}</b>
@@ -966,34 +1053,50 @@ function ScheduleView({
         </div>
       </section>
 
-      <FormPanel title="수업반 추가" action={onAddClass}>
-        <input name="name" placeholder="예: 초급 라인댄스" required />
+      <FormDrawer id="drawer-class" title="수업반 추가" hint="요일·시간·수강료를 정해 새 수업을 만듭니다" action={onAddClass}>
+        <Field label="수업 이름">
+          <input name="name" placeholder="예: 초급 라인댄스" required />
+        </Field>
         <div className="split">
-          <select name="weekday" defaultValue={today.getDay()}>
-            {weekdays.map((day, index) => (
-              <option value={index} key={day}>
-                {day}요일
-              </option>
-            ))}
+          <Field label="요일">
+            <select name="weekday" defaultValue={today.getDay()}>
+              {weekdays.map((day, index) => (
+                <option value={index} key={day}>
+                  {day}요일
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="정원">
+            <input name="capacity" type="number" min="1" defaultValue="12" />
+          </Field>
+        </div>
+        <div className="split">
+          <Field label="시작 시간">
+            <input name="startTime" type="time" defaultValue="10:00" />
+          </Field>
+          <Field label="종료 시간">
+            <input name="endTime" type="time" defaultValue="10:50" />
+          </Field>
+        </div>
+        <div className="split">
+          <Field label="장소">
+            <input name="location" placeholder="장소" defaultValue="스튜디오" />
+          </Field>
+          <Field label="수강료">
+            <input name="tuitionFee" type="number" min="0" defaultValue="90000" />
+          </Field>
+        </div>
+        <Field label="레벨">
+          <select name="level" defaultValue="초급">
+            <option>입문</option>
+            <option>초급</option>
+            <option>중급</option>
+            <option>고급</option>
+            <option>전체</option>
           </select>
-          <input name="capacity" type="number" min="1" defaultValue="12" aria-label="정원" />
-        </div>
-        <div className="split">
-          <input name="startTime" type="time" defaultValue="10:00" />
-          <input name="endTime" type="time" defaultValue="10:50" />
-        </div>
-        <div className="split">
-          <input name="location" placeholder="장소" defaultValue="스튜디오" />
-          <input name="tuitionFee" type="number" min="0" defaultValue="90000" aria-label="수강료" />
-        </div>
-        <select name="level" defaultValue="초급">
-          <option>입문</option>
-          <option>초급</option>
-          <option>중급</option>
-          <option>고급</option>
-          <option>전체</option>
-        </select>
-      </FormPanel>
+        </Field>
+      </FormDrawer>
 
       <section className="panel">
         <h2>수업반 수정</h2>
@@ -1017,32 +1120,48 @@ function ScheduleView({
                   onUpdateClass(danceClass.id, new FormData(event.currentTarget))
                 }}
               >
-                <input name="name" defaultValue={danceClass.name} />
+                <Field label="수업 이름">
+                  <input name="name" defaultValue={danceClass.name} />
+                </Field>
                 <div className="split">
-                  <select name="weekday" defaultValue={danceClass.weekday}>
-                    {weekdays.map((day, index) => (
-                      <option value={index} key={day}>
-                        {day}요일
-                      </option>
-                    ))}
+                  <Field label="요일">
+                    <select name="weekday" defaultValue={danceClass.weekday}>
+                      {weekdays.map((day, index) => (
+                        <option value={index} key={day}>
+                          {day}요일
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="정원">
+                    <input name="capacity" type="number" min="1" defaultValue={danceClass.capacity} />
+                  </Field>
+                </div>
+                <div className="split">
+                  <Field label="시작 시간">
+                    <input name="startTime" type="time" defaultValue={danceClass.startTime} />
+                  </Field>
+                  <Field label="종료 시간">
+                    <input name="endTime" type="time" defaultValue={danceClass.endTime} />
+                  </Field>
+                </div>
+                <div className="split">
+                  <Field label="장소">
+                    <input name="location" defaultValue={danceClass.location} />
+                  </Field>
+                  <Field label="수강료">
+                    <input name="tuitionFee" type="number" min="0" defaultValue={danceClass.tuitionFee} />
+                  </Field>
+                </div>
+                <Field label="레벨">
+                  <select name="level" defaultValue={danceClass.level}>
+                    <option>입문</option>
+                    <option>초급</option>
+                    <option>중급</option>
+                    <option>고급</option>
+                    <option>전체</option>
                   </select>
-                  <input name="capacity" type="number" min="1" defaultValue={danceClass.capacity} />
-                </div>
-                <div className="split">
-                  <input name="startTime" type="time" defaultValue={danceClass.startTime} />
-                  <input name="endTime" type="time" defaultValue={danceClass.endTime} />
-                </div>
-                <div className="split">
-                  <input name="location" defaultValue={danceClass.location} />
-                  <input name="tuitionFee" type="number" min="0" defaultValue={danceClass.tuitionFee} />
-                </div>
-                <select name="level" defaultValue={danceClass.level}>
-                  <option>입문</option>
-                  <option>초급</option>
-                  <option>중급</option>
-                  <option>고급</option>
-                  <option>전체</option>
-                </select>
+                </Field>
                 <button type="submit" className="secondaryButton">수정 저장</button>
               </form>
             </details>
@@ -1081,11 +1200,13 @@ function MembersView({
     { label: '상담만 한 사람', status: 'prospect' },
     { label: '현재 대기', status: 'waitlist' },
   ]
-  const filtered = members.filter((member) => {
-    if (member.status !== memberFilter) return false
-    const haystack = `${member.name} ${member.phone} ${member.level}`.toLowerCase()
-    return haystack.includes(query.toLowerCase())
-  })
+  const filtered = members
+    .filter((member) => {
+      if (member.status !== memberFilter) return false
+      const haystack = `${member.name} ${member.phone} ${member.level} ${member.note}`.toLowerCase()
+      return haystack.includes(query.toLowerCase())
+    })
+    .sort((a, b) => a.name.localeCompare(b.name, 'ko'))
 
   return (
     <section className="screen memberDirectory">
@@ -1121,47 +1242,43 @@ function MembersView({
             )
           })}
         </div>
-        <div className="memberFilterChips">
-          <span className="filterBadge">조건 1</span>
-          <button type="button">이용회원 {members.filter((member) => member.status === 'active').length}</button>
-          <button type="button">수강권 전체</button>
-          <button type="button">레벨 전체</button>
-        </div>
         <div className="memberResultBar">
           <span>총 <b>{filtered.length}</b>명</span>
-          <button type="button">이름 오름차순</button>
+          <small>가나다순 정렬</small>
         </div>
       </section>
 
-      <details className="passBuilder">
-        <summary>
-          <span>
-            <strong>수강권 만들기</strong>
-            <small>라인댄스 단체반 / 라틴댄스 단체반 / 개인레슨으로 수강권을 세분화</small>
-          </span>
-          <Plus size={18} />
-        </summary>
-        <form
-          className="formGrid"
-          onSubmit={(event) => {
-            event.preventDefault()
-            onAddPassTemplate(new FormData(event.currentTarget))
-            event.currentTarget.reset()
-          }}
-        >
-          <div className="split">
+      <FormDrawer
+        title="수강권 만들기"
+        hint="라인댄스 단체반 / 라틴댄스 단체반 / 개인레슨으로 세분화"
+        action={onAddPassTemplate}
+        submitLabel="수강권 저장"
+      >
+        <div className="split">
+          <Field label="수업 종류">
             <select name="type" defaultValue="line_group">
               <option value="line_group">라인댄스 단체반</option>
               <option value="latin_group">라틴댄스 단체반</option>
               <option value="private">개인레슨</option>
             </select>
-            <input name="sessionCount" type="number" min="1" defaultValue="8" aria-label="수업 횟수" />
-          </div>
-          <input name="name" placeholder="수강권 / 수업 이름 예: 초급 라인댄스 8회" required />
-          <div className="split">
+          </Field>
+          <Field label="수업 횟수">
+            <input name="sessionCount" type="number" min="1" defaultValue="8" />
+          </Field>
+        </div>
+        <Field label="수강권 이름">
+          <input name="name" placeholder="예: 초급 라인댄스 8회" required />
+        </Field>
+        <div className="split">
+          <Field label="시작 시간">
             <input name="startTime" type="time" defaultValue="10:00" />
+          </Field>
+          <Field label="종료 시간">
             <input name="endTime" type="time" defaultValue="10:50" />
-          </div>
+          </Field>
+        </div>
+        <div className="field">
+          <span>매주 수업 요일</span>
           <div className="weekdayPicker" aria-label="매주 수업 요일">
             {weekdays.map((day, index) => (
               <label key={day}>
@@ -1170,10 +1287,16 @@ function MembersView({
               </label>
             ))}
           </div>
-          <div className="split">
-            <input name="capacity" type="number" min="1" defaultValue="12" aria-label="최대 인원" />
-            <input name="tuitionFee" type="number" min="0" defaultValue="90000" aria-label="수강료" />
-          </div>
+        </div>
+        <div className="split">
+          <Field label="최대 인원">
+            <input name="capacity" type="number" min="1" defaultValue="12" />
+          </Field>
+          <Field label="수강료">
+            <input name="tuitionFee" type="number" min="0" defaultValue="90000" />
+          </Field>
+        </div>
+        <Field label="레벨">
           <select name="level" defaultValue="초급">
             <option>입문</option>
             <option>초급</option>
@@ -1181,58 +1304,80 @@ function MembersView({
             <option>고급</option>
             <option>전체</option>
           </select>
-          <button type="submit" className="secondaryButton">수강권 저장</button>
-        </form>
-      </details>
+        </Field>
+      </FormDrawer>
 
-      <FormPanel title="등록 회원 추가" action={onAddMember}>
-        <input name="name" placeholder="회원 이름" required />
-        <input name="phone" placeholder="010-0000-0000" required />
-        <select name="passTemplateId" defaultValue="">
-          <option value="">수강권 선택 없이 직접 등록</option>
-          {passTemplates.map((pass) => (
-            <option value={pass.id} key={pass.id}>
-              {passCategoryLabel(pass.type)} · {pass.name}
-            </option>
-          ))}
-        </select>
-        <div className="split">
-          <select name="classId" defaultValue={classes[0]?.id ?? ''}>
-            {classes.map((danceClass) => (
-              <option value={danceClass.id} key={danceClass.id}>
-                {danceClass.name}
+      <FormDrawer id="drawer-member" title="등록 회원 추가" hint="새 회원의 기본 정보와 결제 내역을 입력" action={onAddMember}>
+        <Field label="이름">
+          <input name="name" placeholder="회원 이름" required />
+        </Field>
+        <Field label="전화번호">
+          <input name="phone" type="tel" placeholder="010-0000-0000" required />
+        </Field>
+        <Field label="수강권">
+          <select name="passTemplateId" defaultValue="">
+            <option value="">수강권 선택 없이 직접 등록</option>
+            {passTemplates.map((pass) => (
+              <option value={pass.id} key={pass.id}>
+                {passCategoryLabel(pass.type)} · {pass.name}
               </option>
             ))}
           </select>
-          <select name="level" defaultValue="초급">
-            <option>입문</option>
-            <option>초급</option>
-            <option>중급</option>
-            <option>고급</option>
-          </select>
-        </div>
-        <input
-          name="customClassName"
-          placeholder="새 강의명 직접 입력 예: 야간 초급 라인댄스"
-        />
+        </Field>
         <div className="split">
-          <select name="passType" defaultValue="월회비">
-            <option>월회비</option>
-            <option>10회권</option>
-            <option>기간권</option>
-          </select>
-          <input name="remainingCredits" type="number" min="0" defaultValue="0" aria-label="잔여 횟수" />
+          <Field label="배정 수업">
+            <select name="classId" defaultValue={classes[0]?.id ?? ''}>
+              {classes.map((danceClass) => (
+                <option value={danceClass.id} key={danceClass.id}>
+                  {danceClass.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="레벨">
+            <select name="level" defaultValue="초급">
+              <option>입문</option>
+              <option>초급</option>
+              <option>중급</option>
+              <option>고급</option>
+            </select>
+          </Field>
+        </div>
+        <Field label="새 강의명 직접 입력">
+          <input name="customClassName" placeholder="예: 야간 초급 라인댄스" />
+        </Field>
+        <div className="split">
+          <Field label="결제 유형">
+            <select name="passType" defaultValue="월회비">
+              <option>월회비</option>
+              <option>10회권</option>
+              <option>기간권</option>
+            </select>
+          </Field>
+          <Field label="잔여 횟수">
+            <input name="remainingCredits" type="number" min="0" defaultValue="0" />
+          </Field>
         </div>
         <div className="split">
-          <input name="paidAmount" type="number" min="0" defaultValue="90000" aria-label="결제 금액" />
-          <input name="lastPaidAt" type="date" defaultValue={todayKey} aria-label="최근 결제일" />
+          <Field label="결제 금액">
+            <input name="paidAmount" type="number" min="0" defaultValue="90000" />
+          </Field>
+          <Field label="최근 결제일">
+            <input name="lastPaidAt" type="date" defaultValue={todayKey} />
+          </Field>
         </div>
         <div className="split">
-          <input name="nextPaymentDue" type="date" defaultValue={addDays(30)} aria-label="다음 결제일" />
-          <input name="passUntil" type="date" defaultValue={addDays(30)} aria-label="수강 만료일" />
+          <Field label="다음 결제일">
+            <input name="nextPaymentDue" type="date" defaultValue={addDays(30)} />
+          </Field>
+          <Field label="수강 만료일">
+            <input name="passUntil" type="date" defaultValue={addDays(30)} />
+          </Field>
         </div>
-        <input name="note" placeholder="메모" />
-      </FormPanel>
+        <Field label="메모">
+          <input name="note" placeholder="메모" />
+        </Field>
+      </FormDrawer>
 
       <section className="panel">
         <h2>회원 목록</h2>
@@ -1252,6 +1397,12 @@ function MembersView({
               },
               { absent: 0, makeup: 0, present: 0 } as Record<AttendanceStatus, number>,
             )
+            let lastPresent = ''
+            for (const [key, status] of Object.entries(attendance)) {
+              if (status !== 'present' || !key.endsWith(`|${member.id}`)) continue
+              const date = key.split('|')[0]
+              if (date > lastPresent) lastPresent = date
+            }
             const isEditing = editingMemberId === member.id
             return (
               <article className="memberCard memberLookupCard" key={member.id}>
@@ -1260,18 +1411,55 @@ function MembersView({
                     <div className="memberAvatar">{member.name.slice(0, 1)}</div>
                     <div className="memberMain">
                       <strong>{member.name}</strong>
-                      <span>
-                        <Phone size={14} /> {member.phone}
-                      </span>
+                      <a href={`tel:${member.phone}`}>
+                        <Phone size={13} /> {member.phone}
+                      </a>
                     </div>
-                    <b className={`memberBadge status-${member.status}`}>
-                      {memberStatusLabel(member.status)}
-                    </b>
+                    <div className="memberMeta">
+                      <b className={`memberBadge status-${member.status}`}>
+                        {memberStatusLabel(member.status)} 회원
+                      </b>
+                      {member.status === 'active' && (
+                        <b className={`memberBadge pay ${member.paymentStatus}`}>
+                          {paymentLabel(member.paymentStatus)}
+                        </b>
+                      )}
+                    </div>
                   </div>
                   <div className="passBlock">
                     <strong>{primaryClass?.name ?? member.interest ?? '수업 미지정'}</strong>
-                    <span>{member.lastPaidAt || todayKey} ~ {member.passUntil || '-'}</span>
+                    <span>
+                      {member.passType} · {member.lastPaidAt || todayKey} ~ {member.passUntil || '-'}
+                    </span>
                   </div>
+                  {member.status === 'active' ? (
+                    <dl className="memberFacts">
+                      <div>
+                        <dt>잔여기간</dt>
+                        <dd>{dueDays === null ? '-' : `${dueDays}일 남음`}</dd>
+                      </div>
+                      <div>
+                        <dt>잔여횟수</dt>
+                        <dd>{member.remainingCredits}회 남음</dd>
+                      </div>
+                      <div>
+                        <dt>최근 출석일</dt>
+                        <dd>{lastPresent || '기록 없음'}</dd>
+                      </div>
+                      <div>
+                        <dt>출석 현황</dt>
+                        <dd>
+                          출석 {attendanceSummary.present} · 결석 {attendanceSummary.absent} · 보강{' '}
+                          {attendanceSummary.makeup}
+                        </dd>
+                      </div>
+                    </dl>
+                  ) : (
+                    <div className="consultInfo">
+                      <span>{member.consultedAt ?? '상담일 없음'} · {member.interest || '관심 수업 미정'}</span>
+                      {member.note && <p>{member.note}</p>}
+                    </div>
+                  )}
                   <button
                     type="button"
                     className="editMemberButton"
@@ -1283,26 +1471,9 @@ function MembersView({
                 {isEditing && (
                 <>
                   <div className="memberDetailBody">
-                  <div className="memberLookupStats">
-                    <span>잔여기간</span>
-                    <b>{dueDays === null ? '-' : `${dueDays}일 남음`}</b>
-                    <span>잔여횟수</span>
-                    <b>{member.remainingCredits}회 남음</b>
-                    <span>결제금액</span>
-                    <b>{formatCurrency(member.paidAmount)}</b>
-                    <span>다음 결제</span>
-                    <b>{member.nextPaymentDue || '-'}</b>
-                    <span>출석현황</span>
-                    <b>
-                      출석 {attendanceSummary.present} · 결석 {attendanceSummary.absent} · 보강{' '}
-                      {attendanceSummary.makeup}
-                    </b>
-                  </div>
                   <div className="memberLookupFoot">
                     <span>{member.note || '상담/진행 메모 없음'}</span>
-                    {member.status === 'active' && (
-                      <b className={member.paymentStatus}>{paymentLabel(member.paymentStatus)}</b>
-                    )}
+                    <b>{formatCurrency(member.paidAmount)}</b>
                   </div>
                 </div>
                 <form
@@ -1313,54 +1484,80 @@ function MembersView({
                     setEditingMemberId(null)
                   }}
                 >
-                  <input name="name" defaultValue={member.name} aria-label="회원 이름" />
-                  <input name="phone" defaultValue={member.phone} aria-label="전화번호" />
+                  <Field label="이름">
+                    <input name="name" defaultValue={member.name} />
+                  </Field>
+                  <Field label="전화번호">
+                    <input name="phone" type="tel" defaultValue={member.phone} />
+                  </Field>
                   <div className="split">
-                    <select name="status" defaultValue={member.status}>
-                      <option value="active">등록한 사람</option>
-                      <option value="prospect">상담만 한 사람</option>
-                      <option value="waitlist">현재 대기</option>
-                    </select>
-                    <select name="classId" defaultValue={member.classIds[0] ?? ''}>
-                      <option value="">수업 미지정</option>
-                      {classes.map((danceClass) => (
-                        <option value={danceClass.id} key={danceClass.id}>
-                          {danceClass.name}
-                        </option>
-                      ))}
-                    </select>
+                    <Field label="구분">
+                      <select name="status" defaultValue={member.status}>
+                        <option value="active">등록한 사람</option>
+                        <option value="prospect">상담만 한 사람</option>
+                        <option value="waitlist">현재 대기</option>
+                      </select>
+                    </Field>
+                    <Field label="배정 수업">
+                      <select name="classId" defaultValue={member.classIds[0] ?? ''}>
+                        <option value="">수업 미지정</option>
+                        {classes.map((danceClass) => (
+                          <option value={danceClass.id} key={danceClass.id}>
+                            {danceClass.name}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
                   </div>
                   <div className="split">
-                    <select name="level" defaultValue={member.level}>
-                      <option>입문</option>
-                      <option>초급</option>
-                      <option>중급</option>
-                      <option>고급</option>
-                    </select>
-                    <select name="passType" defaultValue={member.passType}>
-                      <option>월회비</option>
-                      <option>10회권</option>
-                      <option>기간권</option>
-                      <option>상담</option>
-                      <option>대기</option>
-                    </select>
+                    <Field label="레벨">
+                      <select name="level" defaultValue={member.level}>
+                        <option>입문</option>
+                        <option>초급</option>
+                        <option>중급</option>
+                        <option>고급</option>
+                      </select>
+                    </Field>
+                    <Field label="결제 유형">
+                      <select name="passType" defaultValue={member.passType}>
+                        <option>월회비</option>
+                        <option>10회권</option>
+                        <option>기간권</option>
+                        <option>상담</option>
+                        <option>대기</option>
+                      </select>
+                    </Field>
                   </div>
                   <div className="split">
-                    <input name="remainingCredits" type="number" min="0" defaultValue={member.remainingCredits} />
-                    <input name="paidAmount" type="number" min="0" defaultValue={member.paidAmount} />
+                    <Field label="잔여 횟수">
+                      <input name="remainingCredits" type="number" min="0" defaultValue={member.remainingCredits} />
+                    </Field>
+                    <Field label="결제 금액">
+                      <input name="paidAmount" type="number" min="0" defaultValue={member.paidAmount} />
+                    </Field>
                   </div>
                   <div className="split">
-                    <input name="lastPaidAt" type="date" defaultValue={member.lastPaidAt || todayKey} />
-                    <input name="nextPaymentDue" type="date" defaultValue={member.nextPaymentDue || addDays(30)} />
+                    <Field label="최근 결제일">
+                      <input name="lastPaidAt" type="date" defaultValue={member.lastPaidAt || todayKey} />
+                    </Field>
+                    <Field label="다음 결제일">
+                      <input name="nextPaymentDue" type="date" defaultValue={member.nextPaymentDue || addDays(30)} />
+                    </Field>
                   </div>
-                  <input name="passUntil" type="date" defaultValue={member.passUntil || addDays(30)} />
-                  <input name="interest" defaultValue={member.interest ?? ''} placeholder="관심 수업 / 상담 주제" />
-                  <textarea
-                    name="note"
-                    defaultValue={member.note}
-                    placeholder="상담 진행 메모, 연락 이력, 특이사항"
-                    rows={4}
-                  />
+                  <Field label="수강 만료일">
+                    <input name="passUntil" type="date" defaultValue={member.passUntil || addDays(30)} />
+                  </Field>
+                  <Field label="관심 수업 / 상담 주제">
+                    <input name="interest" defaultValue={member.interest ?? ''} placeholder="관심 수업 / 상담 주제" />
+                  </Field>
+                  <Field label="메모">
+                    <textarea
+                      name="note"
+                      defaultValue={member.note}
+                      placeholder="상담 진행 메모, 연락 이력, 특이사항"
+                      rows={4}
+                    />
+                  </Field>
                   <button type="submit" className="secondaryButton">회원 정보 저장</button>
                 </form>
                 </>
@@ -1390,25 +1587,44 @@ function ConsultationsView({
 
   return (
     <section className="screen">
-      <FormPanel title="상담 등록" action={onAddConsultation}>
-        <input name="name" placeholder="상담 회원 이름" required />
-        <input name="phone" placeholder="010-0000-0000" required />
+      <div className="metricGrid two">
+        <Metric label="상담만 한 회원" value={`${consultationMembers.length}명`} />
+        <Metric label="현재 대기" value={`${waitlistMembers.length}명`} tone="warn" />
+      </div>
+
+      <FormDrawer id="drawer-consult" title="상담 등록" hint="문의 온 회원의 상담 내용을 기록" action={onAddConsultation}>
+        <Field label="이름">
+          <input name="name" placeholder="상담 회원 이름" required />
+        </Field>
+        <Field label="전화번호">
+          <input name="phone" type="tel" placeholder="010-0000-0000" required />
+        </Field>
         <div className="split">
-          <input name="consultedAt" type="date" defaultValue={todayKey} />
-          <select name="status" defaultValue="prospect">
-            <option value="prospect">상담만 한 사람</option>
-            <option value="waitlist">현재 대기</option>
-          </select>
+          <Field label="상담일">
+            <input name="consultedAt" type="date" defaultValue={todayKey} />
+          </Field>
+          <Field label="구분">
+            <select name="status" defaultValue="prospect">
+              <option value="prospect">상담만 한 사람</option>
+              <option value="waitlist">현재 대기</option>
+            </select>
+          </Field>
         </div>
-        <select name="level" defaultValue="입문">
-          <option>입문</option>
-          <option>초급</option>
-          <option>중급</option>
-          <option>고급</option>
-        </select>
-        <input name="interest" placeholder="관심 수업 예: 오전 초급반" />
-        <input name="note" placeholder="상담 내역 메모" />
-      </FormPanel>
+        <Field label="레벨">
+          <select name="level" defaultValue="입문">
+            <option>입문</option>
+            <option>초급</option>
+            <option>중급</option>
+            <option>고급</option>
+          </select>
+        </Field>
+        <Field label="관심 수업">
+          <input name="interest" placeholder="예: 오전 초급반" />
+        </Field>
+        <Field label="상담 메모">
+          <input name="note" placeholder="상담 내역 메모" />
+        </Field>
+      </FormDrawer>
 
       <section className="panel">
         <h2>상담 내역</h2>
@@ -1418,9 +1634,9 @@ function ConsultationsView({
               <div className="consultHead">
                 <div>
                   <strong>{member.name}</strong>
-                  <span>
-                    <Phone size={14} /> {member.phone}
-                  </span>
+                  <a href={`tel:${member.phone}`}>
+                    <Phone size={13} /> {member.phone}
+                  </a>
                 </div>
                 <b className={`status-${member.status}`}>{memberStatusLabel(member.status)}</b>
               </div>
@@ -1438,6 +1654,7 @@ function ConsultationsView({
 }
 
 function AttendanceView({
+  allMembers,
   attendance,
   attendanceDate,
   classMembers,
@@ -1448,6 +1665,7 @@ function AttendanceView({
   setAttendanceStatus,
   setSelectedClassId,
 }: {
+  allMembers: Member[]
   attendance: AttendanceBook
   attendanceDate: string
   classMembers: Member[]
@@ -1458,29 +1676,78 @@ function AttendanceView({
   setAttendanceStatus: (memberId: string, status: AttendanceStatus) => void
   setSelectedClassId: (classId: string) => void
 }) {
+  const monthKey = todayKey.slice(0, 7)
+  const memberStats = allMembers
+    .map((member) => {
+      let present = 0
+      let absent = 0
+      let makeup = 0
+      let monthPresent = 0
+      let lastPresent = ''
+      for (const [key, status] of Object.entries(attendance)) {
+        const [date, , memberId] = key.split('|')
+        if (memberId !== member.id) continue
+        if (status === 'present') {
+          present += 1
+          if (date.startsWith(monthKey)) monthPresent += 1
+          if (date > lastPresent) lastPresent = date
+        } else if (status === 'absent') {
+          absent += 1
+        } else {
+          makeup += 1
+        }
+      }
+      return { absent, lastPresent, makeup, member, monthPresent, present }
+    })
+    .sort(
+      (a, b) =>
+        b.monthPresent - a.monthPresent ||
+        b.present - a.present ||
+        a.member.name.localeCompare(b.member.name, 'ko'),
+    )
+  const summary = classMembers.reduce(
+    (acc, member) => {
+      const status = attendance[attendanceKey(attendanceDate, selectedClassId, member.id)]
+      if (!status) acc.unchecked += 1
+      else acc[status] += 1
+      return acc
+    },
+    { present: 0, absent: 0, makeup: 0, unchecked: 0 },
+  )
+
   return (
     <section className="screen">
       <section className="panel">
         <h2>출석 체크</h2>
         <div className="split">
-          <input
-            type="date"
-            value={attendanceDate}
-            onChange={(event) => setAttendanceDate(event.target.value)}
-          />
-          <select value={selectedClassId} onChange={(event) => setSelectedClassId(event.target.value)}>
-            {classes.map((danceClass) => (
-              <option value={danceClass.id} key={danceClass.id}>
-                {danceClass.name}
-              </option>
-            ))}
-          </select>
+          <Field label="날짜">
+            <input
+              type="date"
+              value={attendanceDate}
+              onChange={(event) => setAttendanceDate(event.target.value)}
+            />
+          </Field>
+          <Field label="수업">
+            <select value={selectedClassId} onChange={(event) => setSelectedClassId(event.target.value)}>
+              {classes.map((danceClass) => (
+                <option value={danceClass.id} key={danceClass.id}>
+                  {danceClass.name}
+                </option>
+              ))}
+            </select>
+          </Field>
         </div>
         {selectedClass && (
           <p className="hint">
             {weekdays[selectedClass.weekday]} {selectedClass.startTime} · {selectedClass.location}
           </p>
         )}
+        <div className="attendanceSummary">
+          <span className="ok">출석 {summary.present}</span>
+          <span className="danger">결석 {summary.absent}</span>
+          <span className="warn">보강 {summary.makeup}</span>
+          <span>미체크 {summary.unchecked}</span>
+        </div>
       </section>
 
       <section className="panel">
@@ -1492,7 +1759,9 @@ function AttendanceView({
               <article className="attendanceRow" key={member.id}>
                 <div>
                   <strong>{member.name}</strong>
-                  <span>{status ? attendanceLabel(status) : '미체크'}</span>
+                  <span className={status ? `state-${status}` : ''}>
+                    {status ? attendanceLabel(status) : '미체크'}
+                  </span>
                 </div>
                 <div className="segmented">
                   <button
@@ -1504,14 +1773,14 @@ function AttendanceView({
                   </button>
                   <button
                     type="button"
-                    className={status === 'absent' ? 'active' : ''}
+                    className={status === 'absent' ? 'active absent' : ''}
                     onClick={() => setAttendanceStatus(member.id, 'absent')}
                   >
                     결석
                   </button>
                   <button
                     type="button"
-                    className={status === 'makeup' ? 'active' : ''}
+                    className={status === 'makeup' ? 'active makeup' : ''}
                     onClick={() => setAttendanceStatus(member.id, 'makeup')}
                   >
                     보강
@@ -1521,6 +1790,33 @@ function AttendanceView({
             )
           })}
           {!classMembers.length && <p className="emptyText">이 수업반에 배정된 회원이 없습니다.</p>}
+        </div>
+      </section>
+
+      <section className="panel">
+        <h2>회원별 출석 현황</h2>
+        <p className="hint storageHint">
+          출석 기록은 이 기기(브라우저)에 자동 저장되어 앱을 껐다 켜도 유지됩니다.
+        </p>
+        <div className="listStack">
+          {memberStats.map(({ absent, lastPresent, makeup, member, monthPresent, present }) => (
+            <article className="memberStatRow" key={member.id}>
+              <div className="taskAvatar">{member.name.slice(0, 1)}</div>
+              <div className="statBody">
+                <strong>{member.name}</strong>
+                <span>
+                  이번 달 출석 <b>{monthPresent}회</b> · 마지막 출석 {lastPresent || '기록 없음'}
+                </span>
+              </div>
+              <div className="statChips">
+                <b className="ok">출석 {present}</b>
+                <b className="danger">결석 {absent}</b>
+                <b className="warn">보강 {makeup}</b>
+                {member.remainingCredits > 0 && <b>잔여 {member.remainingCredits}회</b>}
+              </div>
+            </article>
+          ))}
+          {!memberStats.length && <p className="emptyText">등록된 회원이 없습니다.</p>}
         </div>
       </section>
     </section>
@@ -1536,12 +1832,51 @@ function PaymentsView({
   members: Member[]
   updatePayment: (memberId: string, formData: FormData) => void
 }) {
+  const [statusFilter, setStatusFilter] = useState<PaymentStatus | 'all'>('all')
+  const counts = {
+    paid: members.filter((member) => member.paymentStatus === 'paid').length,
+    soon: members.filter((member) => member.paymentStatus === 'soon').length,
+    unpaid: members.filter((member) => member.paymentStatus === 'unpaid').length,
+  }
+  const monthKey = todayKey.slice(0, 7)
+  const monthTotal = members
+    .filter((member) => member.lastPaidAt.startsWith(monthKey))
+    .reduce((sum, member) => sum + member.paidAmount, 0)
+  const visibleMembers =
+    statusFilter === 'all'
+      ? members
+      : members.filter((member) => member.paymentStatus === statusFilter)
+  const filters: Array<{ label: string; value: PaymentStatus | 'all' }> = [
+    { label: `전체 ${members.length}`, value: 'all' },
+    { label: `완납 ${counts.paid}`, value: 'paid' },
+    { label: `임박 ${counts.soon}`, value: 'soon' },
+    { label: `미납 ${counts.unpaid}`, value: 'unpaid' },
+  ]
+
   return (
     <section className="screen">
+      <section className="paymentHero">
+        <p>이번 달 수납액</p>
+        <strong>{formatCurrency(monthTotal)}</strong>
+        <span>완납 {counts.paid} · 임박 {counts.soon} · 미납 {counts.unpaid}</span>
+      </section>
+
       <section className="panel">
         <h2>결제와 수강권</h2>
+        <div className="paymentFilters" role="tablist" aria-label="결제 상태 필터">
+          {filters.map((filter) => (
+            <button
+              type="button"
+              className={statusFilter === filter.value ? `active filter-${filter.value}` : ''}
+              onClick={() => setStatusFilter(filter.value)}
+              key={filter.value}
+            >
+              {filter.label}
+            </button>
+          ))}
+        </div>
         <div className="listStack">
-          {members.map((member) => {
+          {visibleMembers.map((member) => {
             const className =
               classes.find((danceClass) => member.classIds.includes(danceClass.id))?.name ??
               '수업 미지정'
@@ -1560,51 +1895,83 @@ function PaymentsView({
                   <span>최근 결제 <b>{member.lastPaidAt || '-'}</b></span>
                   <span>다음 결제 <b>{member.nextPaymentDue || '-'}</b></span>
                 </div>
-                <form
-                  className="paymentForm"
-                  onSubmit={(event) => {
-                    event.preventDefault()
-                    updatePayment(member.id, new FormData(event.currentTarget))
-                  }}
-                >
-                  <select name="paymentStatus" defaultValue={member.paymentStatus}>
-                    <option value="paid">완납</option>
-                    <option value="soon">만료 임박</option>
-                    <option value="unpaid">미납</option>
-                  </select>
-                  <select name="passType" defaultValue={member.passType}>
-                    <option>월회비</option>
-                    <option>10회권</option>
-                    <option>기간권</option>
-                  </select>
-                  <input name="remainingCredits" type="number" min="0" defaultValue={member.remainingCredits} />
-                  <input name="paidAmount" type="number" min="0" defaultValue={member.paidAmount} />
-                  <input name="lastPaidAt" type="date" defaultValue={member.lastPaidAt || todayKey} />
-                  <input name="nextPaymentDue" type="date" defaultValue={member.nextPaymentDue || addDays(30)} />
-                  <input name="passUntil" type="date" defaultValue={member.passUntil} />
-                  <button type="submit">저장</button>
-                </form>
+                <details className="paymentEditor">
+                  <summary>결제 정보 수정</summary>
+                  <form
+                    className="paymentForm"
+                    onSubmit={(event) => {
+                      event.preventDefault()
+                      updatePayment(member.id, new FormData(event.currentTarget))
+                    }}
+                  >
+                    <Field label="결제 상태">
+                      <select name="paymentStatus" defaultValue={member.paymentStatus}>
+                        <option value="paid">완납</option>
+                        <option value="soon">만료 임박</option>
+                        <option value="unpaid">미납</option>
+                      </select>
+                    </Field>
+                    <Field label="결제 유형">
+                      <select name="passType" defaultValue={member.passType}>
+                        <option>월회비</option>
+                        <option>10회권</option>
+                        <option>기간권</option>
+                      </select>
+                    </Field>
+                    <Field label="잔여 횟수">
+                      <input name="remainingCredits" type="number" min="0" defaultValue={member.remainingCredits} />
+                    </Field>
+                    <Field label="결제 금액">
+                      <input name="paidAmount" type="number" min="0" defaultValue={member.paidAmount} />
+                    </Field>
+                    <Field label="최근 결제일">
+                      <input name="lastPaidAt" type="date" defaultValue={member.lastPaidAt || todayKey} />
+                    </Field>
+                    <Field label="다음 결제일">
+                      <input name="nextPaymentDue" type="date" defaultValue={member.nextPaymentDue || addDays(30)} />
+                    </Field>
+                    <Field label="수강 만료일">
+                      <input name="passUntil" type="date" defaultValue={member.passUntil} />
+                    </Field>
+                    <button type="submit">저장</button>
+                  </form>
+                </details>
               </article>
             )
           })}
+          {!visibleMembers.length && <p className="emptyText">해당 상태의 회원이 없습니다.</p>}
         </div>
       </section>
     </section>
   )
 }
 
-function FormPanel({
+function FormDrawer({
   action,
   children,
+  hint,
+  id,
+  submitLabel = '추가',
   title,
 }: {
   action: (formData: FormData) => void
   children: React.ReactNode
+  hint?: string
+  id?: string
+  submitLabel?: string
   title: string
 }) {
   return (
-    <section className="panel">
-      <h2>{title}</h2>
+    <details className="formDrawer" id={id}>
+      <summary>
+        <span>
+          <strong>{title}</strong>
+          {hint && <small>{hint}</small>}
+        </span>
+        <i className="drawerIcon" aria-hidden="true">
+          <Plus size={18} />
+        </i>
+      </summary>
       <form
         className="formGrid"
         onSubmit={(event) => {
@@ -1616,27 +1983,39 @@ function FormPanel({
         {children}
         <button type="submit" className="primaryButton">
           <Plus size={18} />
-          추가
+          {submitLabel}
         </button>
       </form>
-    </section>
+    </details>
+  )
+}
+
+function Field({ children, label }: { children: React.ReactNode; label: string }) {
+  return (
+    <label className="field">
+      <span>{label}</span>
+      {children}
+    </label>
   )
 }
 
 function Metric({
   label,
+  onClick,
   tone,
   value,
 }: {
   label: string
+  onClick?: () => void
   tone?: 'danger' | 'warn'
   value: string
 }) {
   return (
-    <div className={`metric ${tone ?? ''}`}>
+    <button type="button" className={`metric ${tone ?? ''}`} onClick={onClick}>
       <span>{label}</span>
       <strong>{value}</strong>
-    </div>
+      {onClick && <ChevronRight size={15} className="metricArrow" />}
+    </button>
   )
 }
 

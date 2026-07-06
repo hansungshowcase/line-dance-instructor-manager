@@ -1,139 +1,119 @@
 .appShell {
-  width: min(100%, 460px);
+  width: min(100%, 480px);
   min-height: 100svh;
   margin: 0 auto;
   background: var(--surface);
   color: var(--ink);
-  padding: 0 14px 118px;
+  padding: calc(14px + env(safe-area-inset-top)) 16px calc(96px + env(safe-area-inset-bottom));
   overflow-x: hidden;
 }
 
-.topBar {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
-  margin: 0 -14px 14px;
-  padding: 20px 18px 18px;
-  background: linear-gradient(135deg, var(--primary), var(--primary-2));
-  color: white;
-  box-shadow: 0 18px 42px rgba(37, 99, 235, 0.22);
-}
-
-.eyebrow {
-  display: block;
-  margin-bottom: 5px;
-  color: rgba(255, 255, 255, 0.76);
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.topBar h1 {
-  margin: 0;
-  font-size: 24px;
-  line-height: 1.15;
-}
-
-.datePill {
-  flex: 0 0 auto;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.18);
-  padding: 8px 10px;
-  font-size: 12px;
-  font-weight: 900;
+.appShell.tab-members {
+  padding-top: 0;
 }
 
 .screen {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
 }
 
-.tab-members {
-  padding-top: 0;
-}
-
-.tab-members .topBar {
-  display: none;
-}
+/* ---------- 홈 히어로 ---------- */
 
 .heroBand {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 16px;
-  min-height: 128px;
-  border-radius: 8px;
-  padding: 20px;
+  min-height: 130px;
+  border-radius: var(--radius-lg);
+  padding: 22px 20px;
   color: white;
-  background:
-    linear-gradient(135deg, rgba(29, 78, 216, 0.96), rgba(99, 102, 241, 0.82)),
-    url('/dance-pattern.svg');
-  background-size: cover;
-  box-shadow: var(--shadow-blue);
+  background: var(--grad);
+  box-shadow: var(--shadow-primary);
 }
 
-.heroBand p,
-.heroBand strong,
-.heroBand span {
+.heroInfo p,
+.heroInfo strong,
+.heroInfo span {
   display: block;
 }
 
-.heroBand p {
-  margin: 0 0 4px;
-  color: rgba(255, 255, 255, 0.78);
+.heroInfo p {
+  margin: 0 0 6px;
+  color: rgba(255, 255, 255, 0.8);
   font-size: 13px;
-  font-weight: 900;
+  font-weight: 600;
 }
 
-.heroBand strong {
-  font-size: 42px;
-  line-height: 1;
+.heroInfo strong {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
 }
 
-.heroBand span {
-  margin-top: 6px;
-  color: rgba(255, 255, 255, 0.82);
-  font-size: 13px;
-  font-weight: 700;
+.heroInfo span {
+  margin-top: 9px;
+  width: fit-content;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 5px 11px;
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
 }
 
-.heroBand button {
+.heroBand > button {
   flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 44px;
   border-radius: 999px;
   background: white;
-  color: var(--primary);
-  padding: 10px 13px;
-  font-weight: 900;
+  color: var(--primary-deep);
+  padding: 11px 15px 11px 17px;
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: 0 8px 20px rgba(74, 99, 216, 0.28);
 }
+
+/* ---------- 지표 카드 ---------- */
 
 .metricGrid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 9px;
+  gap: 10px;
 }
 
 .metric,
 .panel,
 .searchBox,
-.memberCategoryTabs button,
 .rowItem,
+.taskRow,
 .classEditor,
+.formDrawer,
 .memberCard,
 .attendanceRow,
 .paymentCard,
-.consultCard {
+.consultCard,
+.memberStatRow {
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow);
 }
 
 .metric {
-  padding: 14px 13px;
+  position: relative;
+  padding: 16px 15px;
+  text-align: left;
+  transition: transform 0.15s ease;
+}
+
+.metric:active {
+  transform: scale(0.97);
 }
 
 .metric span,
@@ -144,12 +124,21 @@
 .metric span {
   color: var(--muted);
   font-size: 12px;
-  font-weight: 900;
+  font-weight: 600;
 }
 
 .metric strong {
-  margin-top: 5px;
+  margin-top: 6px;
   font-size: 23px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.metricArrow {
+  position: absolute;
+  top: 16px;
+  right: 13px;
+  color: var(--line-strong);
 }
 
 .metric.warn strong,
@@ -164,94 +153,233 @@
   color: var(--danger);
 }
 
-.paid {
+.paid,
+.ok {
   color: var(--ok);
 }
 
+/* ---------- 공통 패널 ---------- */
+
 .panel {
-  padding: 16px;
+  padding: 18px 16px;
 }
 
 .panel h2 {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 0 13px;
-  font-size: 18px;
+  margin: 0 0 14px;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
   line-height: 1.25;
 }
 
-.panel h2::before {
-  content: '';
-  width: 4px;
-  height: 18px;
-  border-radius: 999px;
-  background: var(--primary);
-}
-
 .listStack,
-.alertList,
 .formGrid {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
-.rowItem,
-.attendanceRow,
-.paymentHead,
-.consultHead {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
+.formGrid {
+  gap: 14px;
 }
 
-.rowItem,
-.attendanceRow {
-  align-items: center;
-  padding: 14px;
-}
-
-.rowItem strong,
-.rowItem span,
-.rowItem small,
-.attendanceRow strong,
-.attendanceRow span,
-.paymentHead strong,
-.paymentHead span {
-  display: block;
-}
-
-.rowItem span,
-.rowItem small,
-.attendanceRow span,
-.paymentHead span,
-.hint,
-.emptyText {
+.emptyText,
+.hint {
   color: var(--muted);
   font-size: 13px;
 }
 
-.rowItem b,
-.paymentHead b {
-  flex: 0 0 auto;
+.emptyText {
+  margin: 4px 0;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-md);
+  padding: 20px 14px;
+  text-align: center;
 }
 
-.alertChip {
-  width: fit-content;
+/* ---------- 홈: 오늘 수업 목록 ---------- */
+
+.rowItem {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 14px;
+  border-radius: var(--radius-md);
+}
+
+.rowItem.live {
+  border-color: rgba(109, 135, 250, 0.4);
+  background: linear-gradient(135deg, var(--primary-soft), #ffffff 65%);
+}
+
+.rowTime {
+  flex: 0 0 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  border-radius: var(--radius-sm);
+  background: var(--soft);
+  padding: 8px 4px;
+}
+
+.rowItem.live .rowTime {
+  background: var(--grad);
+  color: white;
+}
+
+.rowTime b {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.rowTime span {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.6;
+}
+
+.rowBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.rowBody strong {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.liveDot {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   border-radius: 999px;
-  padding: 8px 11px;
-  font-size: 13px;
-  font-weight: 900;
+  background: var(--primary);
+  color: white;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
 }
 
-.alertChip.danger {
+.liveDot::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #b6ffd0;
+  animation: pulse 1.4s ease infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.rowBody small {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.rowCount {
+  flex: 0 0 auto;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.rowCount span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* ---------- 홈: 우선 확인 ---------- */
+
+.taskRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 13px;
+  border-radius: var(--radius-md);
+}
+
+.taskRow.danger {
+  border-color: rgba(224, 73, 47, 0.2);
+}
+
+.taskRow.warn {
+  border-color: rgba(192, 127, 20, 0.22);
+}
+
+.taskAvatar {
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--soft);
+  color: var(--sub);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.taskRow.danger .taskAvatar {
   background: var(--danger-soft);
+  color: var(--danger);
 }
 
-.alertChip.warn {
+.taskRow.warn .taskAvatar {
   background: var(--warn-soft);
+  color: var(--warn);
 }
+
+.taskBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.taskBody strong {
+  display: block;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.taskBody span {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.callButton {
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--charcoal);
+  color: white;
+  box-shadow: 0 6px 16px rgba(46, 49, 56, 0.22);
+  transition: transform 0.15s ease;
+}
+
+.callButton:active {
+  transform: scale(0.92);
+}
+
+/* ---------- 시간표 ---------- */
 
 .schedulePanel {
   padding: 0;
@@ -263,33 +391,29 @@
   justify-content: space-between;
   align-items: flex-start;
   gap: 12px;
-  padding: 17px 15px 14px;
+  padding: 18px 16px 15px;
   color: white;
-  background: linear-gradient(135deg, var(--primary), var(--primary-2));
+  background: var(--grad);
 }
 
 .scheduleHeader h2 {
   margin-bottom: 5px;
 }
 
-.scheduleHeader h2::before {
-  background: white;
-}
-
 .scheduleHeader p {
   margin: 0;
-  color: rgba(255, 255, 255, 0.78);
+  color: rgba(255, 255, 255, 0.8);
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .scheduleHeader > span {
   flex: 0 0 auto;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.18);
-  padding: 7px 10px;
+  background: rgba(255, 255, 255, 0.22);
+  padding: 7px 11px;
   font-size: 12px;
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .dayStrip {
@@ -297,7 +421,7 @@
   grid-template-columns: repeat(7, 1fr);
   gap: 5px;
   padding: 12px;
-  background: white;
+  background: var(--panel);
   border-bottom: 1px solid var(--line);
 }
 
@@ -307,46 +431,226 @@
   flex-direction: column;
   align-items: center;
   gap: 3px;
-  border-radius: 8px;
-  padding: 8px 2px;
-  background: var(--soft);
+  border-radius: var(--radius-sm);
+  padding: 9px 2px;
+  background: transparent;
   color: var(--ink);
+  transition: transform 0.15s ease;
+}
+
+.dayStrip button:active {
+  transform: scale(0.94);
 }
 
 .dayStrip .today {
-  background: var(--blue-soft);
-  color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary-deep);
 }
 
 .dayStrip .selected {
-  background: var(--primary);
+  background: var(--charcoal);
   color: white;
-  box-shadow: 0 8px 18px rgba(52, 120, 246, 0.24);
+  box-shadow: 0 8px 18px rgba(46, 49, 56, 0.24);
 }
 
 .dayStrip strong {
   font-size: 13px;
+  font-weight: 700;
 }
 
 .dayStrip span {
   color: var(--muted);
   font-size: 10px;
-  font-weight: 800;
+  font-weight: 600;
+}
+
+.dayStrip .selected span {
+  color: rgba(255, 255, 255, 0.7);
 }
 
 .dayStrip b {
   min-width: 19px;
   border-radius: 999px;
-  background: white;
+  background: var(--soft);
+  color: var(--sub);
   padding: 2px 5px;
   font-size: 11px;
+  font-weight: 700;
 }
+
+.dayStrip .selected b {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+.timelineTitle {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 15px 16px 8px;
+}
+
+.timelineTitle strong {
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.timelineTitle span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.hourTimeline {
+  padding: 0 12px 14px;
+}
+
+.hourRow {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+
+.hourRow:first-child {
+  border-top: 0;
+}
+
+.hourStamp {
+  align-self: start;
+  border-radius: 999px;
+  background: var(--soft);
+  color: var(--muted);
+  padding: 7px 6px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.hourRow.hasClass .hourStamp {
+  background: var(--charcoal);
+  color: white;
+}
+
+.hourCards {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+  justify-content: center;
+}
+
+.noClass {
+  align-self: center;
+  color: var(--line-strong);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.timeClassCard {
+  border-radius: var(--radius-md);
+  background: linear-gradient(150deg, var(--primary-soft), #ffffff 60%);
+  border: 1px solid rgba(109, 135, 250, 0.22);
+  padding: 12px 13px;
+}
+
+.timeClassTop {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.timeClassCard b {
+  display: inline-flex;
+  border-radius: 999px;
+  background: var(--grad);
+  color: white;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.timeClassTop strong,
+.timeClassTop span {
+  display: block;
+}
+
+.timeClassTop strong {
+  margin-top: 6px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.timeClassTop span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.timeClassTop small {
+  flex: 0 0 auto;
+  align-self: end;
+  color: var(--sub);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.scheduleRoster {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid rgba(109, 135, 250, 0.18);
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+.scheduleRoster button {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-radius: var(--radius-sm);
+  background: white;
+  color: var(--ink);
+  padding: 9px 11px;
+  box-shadow: inset 0 0 0 1px rgba(109, 135, 250, 0.24);
+  transition: transform 0.12s ease;
+}
+
+.scheduleRoster button:active {
+  transform: scale(0.98);
+}
+
+.scheduleRoster button.present {
+  background: var(--ok-soft);
+  color: var(--ok);
+  box-shadow: inset 0 0 0 1px rgba(21, 154, 91, 0.3);
+}
+
+.scheduleRoster span,
+.scheduleRoster b,
+.scheduleRoster em {
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.scheduleRoster em {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+/* ---------- 월간 캘린더 ---------- */
 
 .monthCalendar {
   margin: 0 12px 14px;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  background: white;
+  border-radius: var(--radius-md);
+  background: var(--panel);
   overflow: hidden;
 }
 
@@ -359,13 +663,14 @@
 }
 
 .monthCalendarHead strong {
-  font-size: 17px;
+  font-size: 16px;
+  font-weight: 800;
 }
 
 .monthCalendarHead span {
   color: var(--primary);
   font-size: 12px;
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .monthWeekdays,
@@ -385,18 +690,18 @@
   text-align: center;
   color: var(--muted);
   font-size: 11px;
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .monthGrid button {
-  min-height: 58px;
+  min-height: 56px;
   display: flex;
   flex-direction: column;
   gap: 3px;
   align-items: flex-start;
   border-right: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
-  background: white;
+  background: var(--panel);
   color: var(--ink);
   padding: 6px 5px;
 }
@@ -407,221 +712,222 @@
 
 .monthGrid b {
   font-size: 12px;
+  font-weight: 600;
 }
 
 .monthGrid span {
   width: 100%;
   overflow: hidden;
   border-radius: 4px;
-  background: var(--blue-soft);
-  color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary-deep);
   padding: 2px 3px;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 9px;
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .monthGrid .outside {
-  color: #b7bfca;
-  background: #fafbfe;
+  color: #bcc1cd;
+  background: #fbfcfe;
 }
 
 .monthGrid .today b {
-  color: var(--primary);
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: white;
 }
 
 .monthGrid .selected {
-  background: #f2f6ff;
-  box-shadow: inset 0 0 0 2px rgba(52, 120, 246, 0.32);
+  background: var(--primary-soft);
+  box-shadow: inset 0 0 0 2px rgba(109, 135, 250, 0.45);
 }
 
-.timelineTitle {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 14px 15px 8px;
-}
+/* ---------- 접이식 입력 서랍 ---------- */
 
-.timelineTitle strong {
-  font-size: 18px;
-}
-
-.timelineTitle span {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.hourTimeline {
-  padding: 0 12px 14px;
-}
-
-.hourRow {
-  display: grid;
-  grid-template-columns: 58px 1fr;
-  gap: 10px;
-  padding: 9px 0;
-  border-top: 1px solid var(--line);
-}
-
-.hourRow:first-child {
-  border-top: 0;
-}
-
-.hourStamp {
-  position: sticky;
-  left: 0;
-  align-self: start;
-  border-radius: 999px;
-  background: var(--soft);
-  color: var(--muted);
-  padding: 7px 6px;
-  text-align: center;
-  font-size: 12px;
-  font-weight: 900;
-}
-
-.hourRow.hasClass .hourStamp {
-  background: var(--primary);
-  color: white;
-}
-
-.hourCards {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  min-width: 0;
-}
-
-.timeClassCard {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, var(--blue-soft), #ffffff);
-  border: 1px solid rgba(37, 99, 235, 0.16);
-  padding: 11px 12px;
-}
-
-.timeClassCard b {
-  display: inline-flex;
-  border-radius: 999px;
-  background: var(--primary);
-  color: white;
-  padding: 3px 7px;
-  font-size: 11px;
-}
-
-.timeClassCard strong,
-.timeClassCard span,
-.timeClassCard small {
-  display: block;
-}
-
-.timeClassCard strong {
-  margin-top: 5px;
-  font-size: 15px;
-}
-
-.timeClassCard span,
-.timeClassCard small,
-.noClass {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.timeClassCard small {
-  flex: 0 0 auto;
-  align-self: end;
-  color: var(--ink);
-}
-
-.scheduleRoster {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  border-top: 1px solid rgba(37, 99, 235, 0.14);
-  padding-top: 9px;
-}
-
-.scheduleRoster button {
-  min-height: 38px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  border-radius: 8px;
-  background: white;
-  color: var(--ink);
-  padding: 8px 9px;
-  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.14);
-}
-
-.scheduleRoster button.present {
-  background: var(--ok-soft);
-  color: var(--ok);
-}
-
-.scheduleRoster span,
-.scheduleRoster b,
-.scheduleRoster em {
-  font-size: 12px;
-  font-style: normal;
-  font-weight: 900;
-}
-
-.scheduleRoster em {
-  color: var(--muted);
-}
-
+.formDrawer,
 .classEditor {
   overflow: hidden;
 }
 
-.passBuilder {
-  margin: 14px 14px 0;
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: white;
-  box-shadow: var(--shadow);
-}
-
-.passBuilder summary {
+.formDrawer summary,
+.classEditor summary {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  padding: 15px;
+  padding: 16px;
   cursor: pointer;
+  user-select: none;
+  list-style: none;
 }
 
-.passBuilder summary::-webkit-details-marker {
+.formDrawer summary::-webkit-details-marker,
+.classEditor summary::-webkit-details-marker {
   display: none;
 }
 
-.passBuilder summary strong,
-.passBuilder summary small {
+.formDrawer summary strong,
+.formDrawer summary small,
+.classEditor summary strong,
+.classEditor summary small {
   display: block;
 }
 
-.passBuilder summary strong {
-  font-size: 17px;
+.formDrawer summary strong,
+.classEditor summary strong {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
-.passBuilder summary small {
-  margin-top: 4px;
+.formDrawer summary small,
+.classEditor summary small {
+  margin-top: 3px;
   color: var(--muted);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 500;
 }
 
-.passBuilder form {
+.drawerIcon {
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--primary-soft);
+  color: var(--primary);
+  transition: transform 0.2s ease;
+}
+
+.formDrawer[open] .drawerIcon {
+  transform: rotate(45deg);
+  background: var(--charcoal);
+  color: white;
+}
+
+.classEditor summary svg {
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+
+.formDrawer form,
+.classEditor form {
   border-top: 1px solid var(--line);
-  padding: 14px;
-  background: #fbfcff;
+  padding: 16px;
+  background: #fcfcfe;
+}
+
+/* ---------- 폼 요소 ---------- */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.field > span {
+  color: var(--sub);
+  font-size: 12px;
+  font-weight: 600;
+  padding-left: 2px;
+}
+
+.split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  align-items: end;
+}
+
+input,
+select,
+textarea,
+button {
+  font: inherit;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 50px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: white;
+  color: var(--ink);
+  padding: 13px 13px;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.25;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #aeb3c0;
+  font-weight: 400;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(109, 135, 250, 0.16);
+}
+
+button:focus-visible {
+  outline: 2px solid rgba(109, 135, 250, 0.5);
+  outline-offset: 2px;
+}
+
+textarea {
+  resize: vertical;
+  line-height: 1.5;
+}
+
+button {
+  border: 0;
+  cursor: pointer;
+}
+
+.primaryButton,
+.secondaryButton,
+.paymentForm button {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  min-height: 52px;
+  border-radius: var(--radius-md);
+  background: var(--charcoal);
+  color: white;
+  font-weight: 700;
+  font-size: 16px;
+  box-shadow: 0 10px 22px rgba(46, 49, 56, 0.2);
+  transition: transform 0.15s ease;
+}
+
+.primaryButton:active,
+.secondaryButton:active,
+.paymentForm button:active {
+  transform: scale(0.98);
+}
+
+.secondaryButton {
+  background: white;
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
+  box-shadow: none;
 }
 
 .weekdayPicker {
@@ -632,6 +938,7 @@
 
 .weekdayPicker label {
   min-width: 0;
+  position: relative;
 }
 
 .weekdayPicker input {
@@ -643,206 +950,116 @@
 .weekdayPicker span {
   display: grid;
   place-items: center;
-  min-height: 38px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  min-height: 42px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
   background: white;
   color: var(--muted);
-  font-size: 12px;
-  font-weight: 900;
+  font-size: 13px;
+  font-weight: 700;
+  transition: all 0.15s ease;
 }
 
 .weekdayPicker input:checked + span {
-  border-color: var(--primary);
-  background: var(--primary);
+  border-color: transparent;
+  background: var(--grad);
   color: white;
+  box-shadow: 0 6px 14px rgba(109, 135, 250, 0.32);
 }
 
-.classEditor summary {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  padding: 14px;
-  cursor: pointer;
-}
-
-.classEditor summary::-webkit-details-marker {
-  display: none;
-}
-
-.classEditor summary strong,
-.classEditor summary small {
-  display: block;
-}
-
-.classEditor summary small {
-  margin-top: 4px;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.classEditor form {
-  padding: 0 14px 14px;
-}
-
-.searchBox {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 13px;
-}
-
-.searchBox input {
-  border: 0;
-  padding-inline: 0;
-}
+/* ---------- 회원 화면 ---------- */
 
 .memberDirectory {
   gap: 0;
-  margin: 0 -14px;
+  margin: 0 -16px;
+}
+
+.memberDirectory > .formDrawer,
+.memberDirectory > .panel {
+  margin: 14px 16px 0;
 }
 
 .memberDirectoryHero {
-  padding: 34px 18px 54px;
-  background: linear-gradient(135deg, #5f97ff, #9286ff);
+  padding: calc(28px + env(safe-area-inset-top)) 20px 54px;
+  background: var(--grad);
   color: white;
 }
 
 .memberHeroTitle {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-bottom: 24px;
+  gap: 5px;
+  margin-bottom: 20px;
 }
 
 .memberHeroTitle span {
-  color: rgba(255, 255, 255, 0.72);
-  font-size: 13px;
-  font-weight: 900;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .memberHeroTitle strong {
-  font-size: 25px;
-  line-height: 1.2;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.searchBox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 15px;
+}
+
+.searchBox input {
+  border: 0;
+  padding-inline: 0;
+  background: transparent;
+}
+
+.searchBox input:focus {
+  box-shadow: none;
 }
 
 .memberSearchBox {
-  min-height: 58px;
+  min-height: 56px;
   border: 0;
   border-radius: 999px;
   background: white;
-  box-shadow: 0 16px 34px rgba(45, 60, 112, 0.16);
+  box-shadow: 0 14px 30px rgba(74, 99, 216, 0.28);
 }
 
 .memberSearchBox svg {
-  color: #a8b0bd;
+  color: #aeb3c0;
 }
 
 .memberDirectorySheet {
   position: relative;
   z-index: 1;
-  margin-top: -28px;
-  border-radius: 28px 28px 0 0;
-  background: white;
-  box-shadow: 0 -12px 28px rgba(17, 24, 39, 0.08);
+  margin-top: -26px;
+  border-radius: 26px 26px 0 0;
+  background: var(--panel);
+  box-shadow: 0 -12px 28px rgba(38, 40, 46, 0.06);
   overflow: hidden;
-}
-
-.memberDirectorySheet + .panel,
-.memberDirectorySheet ~ .panel {
-  margin: 14px 14px 0;
-}
-
-.memberDirectory > .panel {
-  margin-left: 14px;
-  margin-right: 14px;
-}
-
-
-.memberFilterChips {
-  position: relative;
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding: 13px 14px;
-  background: white;
-  border-bottom: 1px solid var(--line);
-  scrollbar-width: none;
-}
-
-.memberFilterChips::-webkit-scrollbar {
-  display: none;
-}
-
-.memberFilterChips button,
-.filterBadge {
-  flex: 0 0 auto;
-  border-radius: 999px;
-  padding: 11px 15px;
-  font-size: 13px;
-  font-weight: 900;
-}
-
-.memberFilterChips button {
-  background: var(--soft);
-  color: var(--muted);
-}
-
-.filterBadge {
-  display: inline-flex;
-  align-items: center;
-  background: var(--primary);
-  color: white;
-  box-shadow: 0 10px 20px rgba(52, 120, 246, 0.22);
-}
-
-.memberResultBar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  padding: 14px;
-  background: #f2f5fa;
-}
-
-.memberResultBar span {
-  color: var(--muted);
-  font-size: 14px;
-  font-weight: 900;
-}
-
-.memberResultBar b {
-  color: var(--primary);
-  font-size: 20px;
-}
-
-.memberResultBar button {
-  background: transparent;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 900;
 }
 
 .memberCategoryTabs {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 0;
-  padding: 0 20px;
+  padding: 0 12px;
   border-bottom: 1px solid var(--line);
 }
 
 .memberCategoryTabs button {
-  min-height: 78px;
+  min-height: 72px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 4px;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
+  background: transparent;
   color: var(--muted);
   padding: 12px 4px;
   text-align: center;
@@ -850,7 +1067,6 @@
 
 .memberCategoryTabs button.active {
   position: relative;
-  background: white;
   color: var(--ink);
 }
 
@@ -871,25 +1087,51 @@
 }
 
 .memberCategoryTabs span {
-  font-size: 14px;
-  font-weight: 900;
+  font-size: 13px;
+  font-weight: 700;
   line-height: 1.2;
 }
 
 .memberCategoryTabs b {
   color: var(--primary);
   font-size: 18px;
+  font-weight: 800;
   line-height: 1;
 }
+
+.memberResultBar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 18px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+
+.memberResultBar span {
+  color: var(--sub);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.memberResultBar b {
+  color: var(--primary);
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.memberResultBar small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* ---------- 회원 카드 ---------- */
 
 .memberCard {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 11px;
-  padding: 14px;
-}
-
-.memberLookupCard {
   padding: 0;
   overflow: hidden;
 }
@@ -897,41 +1139,99 @@
 .memberLookupSummary {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 15px;
+  gap: 13px;
+  padding: 16px;
 }
 
 .memberLookupTop {
   display: grid;
-  grid-template-columns: 54px 1fr auto;
-  gap: 11px;
+  grid-template-columns: 46px 1fr auto;
+  gap: 12px;
   align-items: center;
 }
 
 .memberAvatar {
-  width: 54px;
-  height: 54px;
+  width: 46px;
+  height: 46px;
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--primary), var(--primary-2));
+  background: var(--grad);
   color: white;
-  font-size: 20px;
-  font-weight: 900;
-  box-shadow: 0 10px 20px rgba(52, 120, 246, 0.22);
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.memberMain strong {
+  display: block;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.memberMain a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 3px;
+  color: var(--sub);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.memberMain a svg {
+  color: var(--primary);
+}
+
+.memberMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  align-items: flex-end;
+  align-self: start;
 }
 
 .memberBadge {
-  align-self: start;
-  border-radius: 7px;
-  padding: 6px 8px;
-  font-size: 12px;
-  font-weight: 900;
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.status-active {
+  background: #545c94 !important;
+  color: white;
+}
+
+.status-prospect {
+  background: var(--primary-soft) !important;
+  color: var(--primary-deep);
+}
+
+.status-waitlist {
+  background: var(--warn-soft) !important;
+  color: var(--warn);
+}
+
+.memberBadge.pay {
+  background: var(--soft);
+}
+
+.memberBadge.pay.paid {
+  background: var(--ok-soft);
+}
+
+.memberBadge.pay.soon {
+  background: var(--warn-soft);
+}
+
+.memberBadge.pay.unpaid {
+  background: var(--danger-soft);
 }
 
 .passBlock {
   border-top: 1px solid var(--line);
-  padding-top: 12px;
+  padding-top: 13px;
 }
 
 .passBlock strong,
@@ -940,51 +1240,89 @@
 }
 
 .passBlock strong {
-  font-size: 16px;
+  font-size: 15px;
+  font-weight: 700;
 }
 
 .passBlock span {
-  margin-top: 4px;
+  margin-top: 3px;
   color: var(--muted);
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.memberFacts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+}
+
+.memberFacts > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.memberFacts dt {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.memberFacts dd {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.consultInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.consultInfo span {
+  display: inline-flex;
+  width: fit-content;
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary-deep);
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.consultInfo p {
+  margin: 4px 0 0;
+  color: var(--sub);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .editMemberButton {
-  align-self: flex-end;
-  min-width: 76px;
-  min-height: 38px;
-  border-radius: 999px;
-  background: var(--ink);
-  color: white;
-  font-size: 13px;
-  font-weight: 900;
+  min-height: 44px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line-strong);
+  background: white;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+  transition: all 0.15s ease;
 }
 
-.memberLookupStats {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 7px 16px;
+.editMemberButton:active {
+  transform: scale(0.98);
+  background: var(--soft);
 }
 
 .memberDetailBody {
   border-top: 1px solid var(--line);
-  padding: 0 15px 13px;
-}
-
-.memberDetailBody .memberLookupStats {
-  padding-top: 13px;
-}
-
-.memberLookupStats span {
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.memberLookupStats b {
-  text-align: right;
-  font-size: 15px;
+  padding: 13px 16px;
 }
 
 .memberLookupFoot {
@@ -992,273 +1330,508 @@
   justify-content: space-between;
   gap: 10px;
   align-items: center;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--soft);
-  padding: 9px 10px;
+  padding: 10px 11px;
 }
 
 .memberLookupFoot span {
   min-width: 0;
-  color: var(--muted);
+  color: var(--sub);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 500;
 }
 
 .memberLookupFoot b {
   flex: 0 0 auto;
   border-radius: 999px;
-  padding: 5px 8px;
+  background: white;
+  padding: 5px 9px;
   font-size: 12px;
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .memberEditForm {
   border-top: 1px solid var(--line);
-  padding: 14px;
-  background: #fbfcff;
+  padding: 16px;
+  background: #fcfcfe;
 }
 
-.memberMain strong,
-.memberMain span,
-.memberMain small {
-  display: block;
-}
+/* ---------- 상담 ---------- */
 
-.memberMain span {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin-top: 4px;
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.memberMain small {
-  margin-top: 5px;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.financeGrid,
-.paymentSummary {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 7px;
-}
-
-.financeGrid span,
-.paymentSummary span {
-  min-width: 0;
-  border-radius: 8px;
-  background: var(--soft);
-  padding: 9px;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 900;
-}
-
-.financeGrid b,
-.paymentSummary b {
-  display: block;
-  margin-top: 3px;
-  overflow-wrap: anywhere;
-  color: var(--ink);
-  font-size: 13px;
-}
-
-.memberTags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.memberTags span,
-.consultHead b {
-  border-radius: 999px;
-  background: var(--soft);
-  padding: 6px 9px;
-  font-size: 12px;
-  font-weight: 900;
-}
-
-.status-active {
-  background: var(--ok-soft) !important;
-  color: var(--ok);
-}
-
-.status-prospect {
-  background: var(--blue-soft) !important;
-  color: var(--primary);
-}
-
-.status-waitlist {
-  background: var(--warn-soft) !important;
-  color: var(--warn);
-}
-
-.memberTags .paid {
-  background: var(--ok-soft);
-}
-
-.memberTags .soon {
-  background: var(--warn-soft);
-}
-
-.memberTags .unpaid {
-  background: var(--danger-soft);
-}
-
-.consultCard,
-.paymentCard {
+.consultCard {
   display: flex;
   flex-direction: column;
   gap: 11px;
-  padding: 14px;
+  padding: 15px;
+  border-radius: var(--radius-md);
 }
 
-.consultHead span {
+.consultHead {
   display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.consultHead strong {
+  display: block;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.consultHead a {
+  display: inline-flex;
   align-items: center;
   gap: 5px;
-  margin-top: 4px;
-  color: var(--muted);
+  margin-top: 3px;
+  color: var(--sub);
   font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.consultHead a svg {
+  color: var(--primary);
+}
+
+.consultHead b {
+  align-self: start;
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .consultBody span {
   display: inline-flex;
   width: fit-content;
   border-radius: 999px;
-  background: var(--blue-soft);
-  color: var(--primary);
-  padding: 6px 9px;
+  background: var(--primary-soft);
+  color: var(--primary-deep);
+  padding: 6px 10px;
   font-size: 12px;
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .consultBody p {
-  margin: 7px 0 0;
+  margin: 8px 0 0;
+  color: var(--sub);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* ---------- 출석 ---------- */
+
+.attendanceSummary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.attendanceSummary span {
+  border-radius: 999px;
+  background: var(--soft);
+  padding: 7px 11px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.attendanceSummary .ok {
+  background: var(--ok-soft);
+}
+
+.attendanceSummary .danger {
+  background: var(--danger-soft);
+}
+
+.attendanceSummary .warn {
+  background: var(--warn-soft);
+}
+
+.storageHint {
+  margin: -6px 0 12px;
+}
+
+.memberStatRow {
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  gap: 10px 12px;
+  align-items: center;
+  padding: 13px 14px;
+  border-radius: var(--radius-md);
+}
+
+.statBody strong {
+  display: block;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.statBody span {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.statBody span b {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.statChips {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.statChips b {
+  border-radius: 999px;
+  background: var(--soft);
+  padding: 6px 10px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.statChips .ok {
+  background: var(--ok-soft);
+}
+
+.statChips .danger {
+  background: var(--danger-soft);
+}
+
+.statChips .warn {
+  background: var(--warn-soft);
+}
+
+.attendanceRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 14px;
+  border-radius: var(--radius-md);
+}
+
+.attendanceRow strong {
+  display: block;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.attendanceRow span {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.attendanceRow .state-present {
+  color: var(--ok);
+}
+
+.attendanceRow .state-absent {
+  color: var(--danger);
+}
+
+.attendanceRow .state-makeup {
+  color: var(--warn);
+}
+
+.segmented {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(52px, 1fr));
+  gap: 6px;
+  min-width: 186px;
+}
+
+.segmented button {
+  min-height: 42px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: white;
   color: var(--muted);
   font-size: 13px;
-  line-height: 1.45;
+  font-weight: 700;
+  transition: all 0.15s ease;
+}
+
+.segmented button:active {
+  transform: scale(0.95);
+}
+
+.segmented button.active {
+  border-color: var(--ok);
+  background: var(--ok);
+  color: white;
+}
+
+.segmented button.active.absent {
+  border-color: var(--danger);
+  background: var(--danger);
+}
+
+.segmented button.active.makeup {
+  border-color: var(--warn);
+  background: var(--warn);
+}
+
+/* ---------- 결제 ---------- */
+
+.paymentHero {
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  color: white;
+  background: var(--grad);
+  box-shadow: var(--shadow-primary);
+}
+
+.paymentHero p {
+  margin: 0 0 6px;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.paymentHero strong {
+  display: block;
+  font-size: 29px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.paymentHero span {
+  display: inline-block;
+  margin-top: 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 6px 11px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.paymentFilters {
+  display: flex;
+  gap: 7px;
+  overflow-x: auto;
+  margin-bottom: 14px;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.paymentFilters::-webkit-scrollbar {
+  display: none;
+}
+
+.paymentFilters button {
+  flex: 0 0 auto;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: white;
+  color: var(--muted);
+  padding: 10px 15px;
+  font-size: 13px;
+  font-weight: 700;
+  transition: all 0.15s ease;
+}
+
+.paymentFilters button.active {
+  border-color: var(--charcoal);
+  background: var(--charcoal);
+  color: white;
+}
+
+.paymentFilters button.active.filter-unpaid {
+  border-color: var(--danger);
+  background: var(--danger);
+}
+
+.paymentFilters button.active.filter-soon {
+  border-color: var(--warn);
+  background: var(--warn);
+}
+
+.paymentFilters button.active.filter-paid {
+  border-color: var(--ok);
+  background: var(--ok);
+}
+
+.paymentCard {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 15px;
+  border-radius: var(--radius-md);
+}
+
+.paymentHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.paymentHead strong,
+.paymentHead span {
+  display: block;
+}
+
+.paymentHead strong {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.paymentHead span {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.paymentHead b {
+  flex: 0 0 auto;
+  align-self: start;
+  border-radius: 6px;
+  padding: 5px 9px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.paymentHead b.paid {
+  background: var(--ok-soft);
+}
+
+.paymentHead b.soon {
+  background: var(--warn-soft);
+}
+
+.paymentHead b.unpaid {
+  background: var(--danger-soft);
+}
+
+.paymentSummary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+}
+
+.paymentSummary span {
+  min-width: 0;
+  border-radius: var(--radius-sm);
+  background: var(--soft);
+  padding: 10px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.paymentSummary b {
+  display: block;
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.paymentEditor {
+  border-top: 1px solid var(--line);
+  margin: 0 -15px -15px;
+}
+
+.paymentEditor summary {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  padding: 13px;
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.paymentEditor summary::-webkit-details-marker {
+  display: none;
+}
+
+.paymentEditor summary::after {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg) translateY(-2px);
+  transition: transform 0.2s ease;
+}
+
+.paymentEditor[open] summary::after {
+  transform: rotate(225deg) translateY(-2px);
 }
 
 .paymentForm {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  gap: 11px;
+  border-top: 1px solid var(--line);
+  padding: 15px;
+  background: #fcfcfe;
 }
 
-.paymentForm input[name='passUntil'],
+.paymentForm .field:last-of-type,
 .paymentForm button {
   grid-column: 1 / -1;
 }
 
-.split {
+/* ---------- 플로팅 버튼 ---------- */
+
+.fab {
+  position: fixed;
+  right: max(16px, calc(50% - 224px));
+  bottom: calc(88px + env(safe-area-inset-bottom));
+  z-index: 25;
+  width: 54px;
+  height: 54px;
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  align-items: stretch;
-}
-
-input,
-select,
-textarea,
-button {
-  font: inherit;
-}
-
-input,
-select,
-textarea {
-  width: 100%;
-  min-width: 0;
-  min-height: 50px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: white;
-  color: var(--ink);
-  padding: 13px 12px;
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1.25;
-}
-
-input:focus,
-select:focus,
-textarea:focus,
-button:focus-visible {
-  outline: 2px solid rgba(37, 99, 235, 0.28);
-  outline-offset: 2px;
-}
-
-textarea {
-  resize: vertical;
-  line-height: 1.45;
-}
-
-button {
-  border: 0;
-  cursor: pointer;
-}
-
-.primaryButton,
-.secondaryButton,
-.paymentForm button {
-  display: inline-flex;
-  justify-content: center;
-  align-items: center;
-  gap: 8px;
-  min-height: 50px;
-  border-radius: 8px;
-  background: var(--primary);
+  place-items: center;
+  border-radius: 50%;
+  background: var(--charcoal);
   color: white;
-  font-weight: 900;
-  font-size: 16px;
-  box-shadow: 0 10px 22px rgba(37, 99, 235, 0.2);
+  box-shadow: 0 12px 28px rgba(46, 49, 56, 0.35);
+  transition: transform 0.15s ease;
 }
 
-.secondaryButton {
-  background: var(--ink);
+.fab:active {
+  transform: scale(0.9);
 }
 
-.segmented {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(54px, 1fr));
-  gap: 6px;
-  min-width: 190px;
-}
-
-.segmented button {
-  min-height: 38px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: white;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 900;
-}
-
-.segmented button.active {
-  border-color: var(--primary);
-  background: var(--primary);
-  color: white;
-}
+/* ---------- 하단 내비게이션 ---------- */
 
 .bottomNav {
   position: fixed;
   left: 50%;
   bottom: 0;
   transform: translateX(-50%);
-  width: min(100%, 460px);
+  z-index: 30;
+  width: min(100%, 480px);
   display: grid;
   grid-template-columns: repeat(6, 1fr);
-  gap: 3px;
-  padding: 8px 9px calc(8px + env(safe-area-inset-bottom));
-  background: rgba(255, 255, 255, 0.96);
+  gap: 2px;
+  padding: 9px 10px calc(9px + env(safe-area-inset-bottom));
+  background: rgba(255, 255, 255, 0.92);
   border-top: 1px solid var(--line);
-  box-shadow: 0 -18px 32px rgba(15, 23, 42, 0.08);
-  backdrop-filter: blur(18px);
+  box-shadow: 0 -14px 34px rgba(38, 40, 46, 0.07);
+  backdrop-filter: blur(20px) saturate(1.6);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
 }
 
 .bottomNav button {
@@ -1269,29 +1842,33 @@ button {
   align-items: center;
   justify-content: center;
   gap: 4px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--muted);
   font-size: 10px;
-  font-weight: 900;
+  font-weight: 700;
+  transition: all 0.15s ease;
 }
 
 .bottomNav svg {
-  width: 19px;
-  height: 19px;
+  width: 20px;
+  height: 20px;
 }
 
 .bottomNav button.active {
-  background: var(--blue-soft);
   color: var(--primary);
 }
 
+.bottomNav button:active {
+  transform: scale(0.92);
+}
+
+/* ---------- 좁은 화면 대응 ---------- */
+
 @media (max-width: 390px) {
-  .rowItem,
-  .attendanceRow,
-  .paymentHead,
-  .consultHead {
+  .attendanceRow {
     flex-direction: column;
+    align-items: stretch;
   }
 
   .segmented {
@@ -1299,11 +1876,20 @@ button {
     width: 100%;
   }
 
-  .timeClassCard {
+  .timeClassTop {
     flex-direction: column;
   }
 
-  .timeClassCard small {
+  .timeClassTop small {
     align-self: start;
+  }
+
+  .heroBand {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .heroBand > button {
+    justify-content: center;
   }
 }

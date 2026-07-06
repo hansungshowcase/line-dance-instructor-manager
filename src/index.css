@@ -1,43 +1,60 @@
 :root {
-  --surface: #f5f7fb;
+  --bg: #f1f2f6;
+  --surface: #f7f8fb;
   --panel: #ffffff;
-  --soft: #f7f9fd;
-  --ink: #111827;
-  --muted: #6b7280;
-  --line: #e5eaf2;
-  --primary: #3478f6;
-  --primary-2: #7c8cff;
-  --blue-soft: #edf4ff;
-  --ok: #0f7a3b;
-  --ok-soft: #e8f8ee;
-  --warn: #b7791f;
-  --warn-soft: #fff7df;
-  --danger: #c24135;
-  --danger-soft: #fff0ef;
-  --shadow: 0 10px 28px rgba(17, 24, 39, 0.06);
-  --shadow-blue: 0 18px 44px rgba(52, 120, 246, 0.2);
+  --soft: #f4f5f9;
+  --ink: #26282e;
+  --sub: #4a4e59;
+  --muted: #8b91a0;
+  --line: #edeef3;
+  --line-strong: #dde0e8;
+  --charcoal: #2e3138;
+  --primary: #5d7bf7;
+  --primary-2: #9d8bfb;
+  --primary-deep: #4a63d8;
+  --primary-soft: #eef1fe;
+  --grad: linear-gradient(135deg, #6d87fa 0%, #8d8afb 55%, #a58dfc 100%);
+  --ok: #159a5b;
+  --ok-soft: #e9f7f0;
+  --warn: #c07f14;
+  --warn-soft: #fdf5e4;
+  --danger: #e0492f;
+  --danger-soft: #fdeeea;
+  --radius-lg: 18px;
+  --radius-md: 14px;
+  --radius-sm: 10px;
+  --shadow: 0 1px 2px rgba(38, 40, 46, 0.03), 0 4px 16px rgba(38, 40, 46, 0.04);
+  --shadow-raised: 0 4px 10px rgba(38, 40, 46, 0.06), 0 16px 36px rgba(38, 40, 46, 0.1);
+  --shadow-primary: 0 12px 28px rgba(109, 135, 250, 0.32);
   font-family:
-    -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Pretendard',
-    'Noto Sans KR', 'Malgun Gothic', 'Segoe UI', system-ui, sans-serif;
+    'Pretendard Variable', 'Pretendard', -apple-system, BlinkMacSystemFont,
+    'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', 'Segoe UI',
+    system-ui, sans-serif;
   color: var(--ink);
-  background: #eef2f7;
+  background: var(--bg);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
 }
 
 * {
   box-sizing: border-box;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   margin: 0;
   min-width: 320px;
   font-size: 15px;
-  line-height: 1.45;
+  line-height: 1.5;
   word-break: keep-all;
   overflow-x: hidden;
+  overscroll-behavior-y: none;
 }
 
 button,
@@ -45,4 +62,14 @@ input,
 select,
 textarea {
   letter-spacing: 0;
+  touch-action: manipulation;
+}
+
+strong,
+b {
+  font-variant-numeric: tabular-nums;
+}
+
+::selection {
+  background: rgba(109, 135, 250, 0.2);
 }
