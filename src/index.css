@@ -53,10 +53,17 @@ body {
   font-size: 15px;
   line-height: 1.5;
   word-break: keep-all;
+  /* 긴 문자열(전화번호·이름·메모)이 칸을 뚫지 못하게 비상 줄바꿈 허용 */
+  overflow-wrap: anywhere;
   overflow-x: hidden;
   overscroll-behavior-y: none;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+}
+
+img,
+svg {
+  max-width: 100%;
 }
 
 button,

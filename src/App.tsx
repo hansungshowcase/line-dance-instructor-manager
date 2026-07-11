@@ -2206,7 +2206,7 @@ function MembersView({
     { label: '전체', value: 'all' },
     { label: '미납', value: 'unpaid' },
     { label: '임박', value: 'soon' },
-    { label: '잔여 2회 이하', value: 'low' },
+    { label: '잔여 부족', value: 'low' },
   ]
 
   return (

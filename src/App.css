@@ -2809,6 +2809,10 @@ button {
     padding-left: 12px;
     padding-right: 12px;
   }
+
+  .memberDirectory {
+    margin: 0 -12px;
+  }
 }
 
 @media (max-width: 390px) {
