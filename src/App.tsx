@@ -1922,7 +1922,7 @@ function TimeClassCard({
       {mode === 'idle' && (
         <div className="cardActions">
           <button type="button" className="checkStartButton" onClick={startChecking}>
-            출석 체크
+            {checkedCount > 0 ? '출석 수정' : '출석 체크'}
             {assignedMembers.length > 0 && ` (${checkedCount}/${assignedMembers.length})`}
           </button>
           {candidates.length > 0 && (

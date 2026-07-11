@@ -114,12 +114,12 @@ test('instructor can manage classes, members, attendance, and payment details', 
   // 시간표 출석 체크: 출석/결석 선택 후 확인을 눌러야 확정
   await page.getByRole('button', { name: '시간표', exact: true }).click()
   const timeCard = page.locator('.timeClassCard').filter({ hasText: '초급 라인댄스' }).first()
-  await timeCard.getByRole('button', { name: /출석 체크/ }).click()
+  await timeCard.getByRole('button', { name: /출석 (체크|수정)/ }).click()
   await timeCard
     .locator('.draftRow')
     .filter({ hasText: '박선희' })
     .getByRole('button', { name: '결석' })
     .click()
   await timeCard.getByRole('button', { name: '확인' }).click()
-  await expect(timeCard.getByRole('button', { name: /출석 체크/ })).toBeVisible()
+  await expect(timeCard.getByRole('button', { name: /출석 (체크|수정)/ })).toBeVisible()
 })
