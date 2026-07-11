@@ -747,7 +747,7 @@ button.rowItem:active {
 /* ---------- 월간 캘린더 ---------- */
 
 .monthCalendar {
-  margin: 0 12px 14px;
+  margin: 12px 12px 4px;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   background: var(--panel);
@@ -1838,6 +1838,11 @@ button {
   min-width: 186px;
 }
 
+.segmented.two {
+  grid-template-columns: repeat(2, minmax(64px, 1fr));
+  min-width: 150px;
+}
+
 .segmented button {
   min-height: 42px;
   border: 1px solid var(--line-strong);
@@ -2222,6 +2227,194 @@ button {
 
 .importButton input {
   display: none;
+}
+
+/* ---------- 완료 알림 토스트 ---------- */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(96px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 40;
+  max-width: min(88%, 420px);
+  border-radius: 999px;
+  background: var(--charcoal);
+  color: white;
+  padding: 13px 22px;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+  box-shadow: var(--shadow-raised);
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  animation: toastIn 0.22s ease;
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 10px);
+  }
+}
+
+/* ---------- 미납 강조 패널 ---------- */
+
+.unpaidPanel {
+  border-color: rgba(224, 73, 47, 0.32);
+  background: linear-gradient(160deg, var(--danger-soft), #ffffff 55%);
+}
+
+.unpaidPanel h2 {
+  color: var(--danger);
+}
+
+/* ---------- 시간표 출석 체크 ---------- */
+
+.checkStartButton {
+  width: 100%;
+  min-height: 48px;
+  margin-top: 10px;
+  border-radius: var(--radius-sm);
+  background: var(--charcoal);
+  color: white;
+  font-size: 14px;
+  font-weight: 700;
+  transition: transform 0.15s ease;
+}
+
+.checkStartButton:active {
+  transform: scale(0.98);
+}
+
+.draftRoster {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  border-top: 1px solid rgba(109, 135, 250, 0.18);
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+.draftRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-radius: var(--radius-sm);
+  background: white;
+  padding: 8px 8px 8px 12px;
+  box-shadow: inset 0 0 0 1px rgba(109, 135, 250, 0.18);
+}
+
+.draftRow > span {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.draftButtons {
+  display: grid;
+  grid-template-columns: repeat(2, 64px);
+  gap: 6px;
+}
+
+.draftButtons button {
+  min-height: 40px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: white;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  transition: all 0.15s ease;
+}
+
+.draftButtons button.on {
+  border-color: var(--ok);
+  background: var(--ok);
+  color: white;
+}
+
+.draftButtons button.on.absent {
+  border-color: var(--danger);
+  background: var(--danger);
+}
+
+.draftEmpty {
+  color: var(--muted);
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 500;
+}
+
+.draftFoot {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 8px;
+  margin-top: 3px;
+}
+
+.draftCancel {
+  min-height: 46px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: white;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.draftConfirm {
+  min-height: 46px;
+  border-radius: var(--radius-sm);
+  background: var(--ok);
+  color: white;
+  font-size: 14px;
+  font-weight: 700;
+  box-shadow: 0 8px 18px rgba(21, 154, 91, 0.28);
+  transition: transform 0.15s ease;
+}
+
+.draftConfirm:active {
+  transform: scale(0.98);
+}
+
+.assignRow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  border-top: 1px solid rgba(109, 135, 250, 0.14);
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+.assignRow select {
+  min-height: 44px;
+  padding: 9px 11px;
+  font-size: 14px;
+}
+
+.assignRow button {
+  min-height: 44px;
+  border-radius: var(--radius-sm);
+  background: var(--primary);
+  color: white;
+  padding: 0 16px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.assignRow button:disabled {
+  background: var(--line-strong);
+  cursor: default;
+}
+
+/* ---------- 카테고리 칩 ---------- */
+
+.categoryChips {
+  margin-bottom: 2px;
 }
 
 /* ---------- 플로팅 버튼 ---------- */

@@ -28,6 +28,8 @@ test('instructor can manage classes, members, attendance, and payment details', 
   await memberDrawer.locator('summary').click()
   await page.getByPlaceholder('회원 이름').fill('최하은')
   await memberDrawer.getByPlaceholder('010-0000-0000').fill('010-5555-1212')
+  // 수강권을 고르면 수업이 자동 배정된다
+  await memberDrawer.locator('select[name="passTemplateId"]').selectOption('pass-beginner-monthly')
   await memberDrawer.locator('input[name="paidAmount"]').fill('95000')
   await memberDrawer.locator('input[name="note"]').fill('오전반 신규')
   await page.getByRole('button', { name: '추가' }).click()
@@ -98,4 +100,16 @@ test('instructor can manage classes, members, attendance, and payment details', 
   await page.getByRole('button', { name: '홈' }).click()
   await page.locator('button.rowItem').first().click()
   await expect(page.getByRole('heading', { name: '출석 체크' })).toBeVisible()
+
+  // 시간표 출석 체크: 출석/결석 선택 후 확인을 눌러야 확정
+  await page.getByRole('button', { name: '시간표', exact: true }).click()
+  const timeCard = page.locator('.timeClassCard').filter({ hasText: '초급 라인댄스' }).first()
+  await timeCard.getByRole('button', { name: /출석 체크/ }).click()
+  await timeCard
+    .locator('.draftRow')
+    .filter({ hasText: '박선희' })
+    .getByRole('button', { name: '결석' })
+    .click()
+  await timeCard.getByRole('button', { name: '확인' }).click()
+  await expect(timeCard.getByRole('button', { name: /출석 체크/ })).toBeVisible()
 })
