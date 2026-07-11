@@ -962,11 +962,9 @@ function App() {
     <main className={`appShell tab-${tab}`}>
       {tab === 'home' && (
         <HomeView
-          activeCount={activeMembers.length}
           backupAgeDays={backupAgeDays}
           backupOverdue={backupOverdue}
           buildSms={buildSms}
-          consultationCount={consultationMembers.length}
           expiringMembers={expiringOnly}
           hasSampleData={hasSampleData}
           lowCreditMembers={lowCreditMembers}
@@ -980,7 +978,6 @@ function App() {
           smsTemplates={smsTemplates}
           todayClasses={todayClasses}
           unpaidMembers={unpaidMembers}
-          waitlistCount={waitlistMembers.length}
         />
       )}
       {tab === 'schedule' && (
@@ -1103,11 +1100,9 @@ function App() {
 }
 
 function HomeView({
-  activeCount,
   backupAgeDays,
   backupOverdue,
   buildSms,
-  consultationCount,
   expiringMembers,
   hasSampleData,
   lowCreditMembers,
@@ -1121,13 +1116,10 @@ function HomeView({
   smsTemplates,
   todayClasses,
   unpaidMembers,
-  waitlistCount,
 }: {
-  activeCount: number
   backupAgeDays: number | null
   backupOverdue: boolean
   buildSms: (kind: keyof SmsTemplates, member: Member) => string
-  consultationCount: number
   expiringMembers: Member[]
   hasSampleData: boolean
   lowCreditMembers: Member[]
@@ -1141,7 +1133,6 @@ function HomeView({
   smsTemplates: SmsTemplates
   todayClasses: DanceClass[]
   unpaidMembers: Member[]
-  waitlistCount: number
 }) {
   const now = new Date()
   const nowMinutes = now.getHours() * 60 + now.getMinutes()
@@ -1188,27 +1179,6 @@ function HomeView({
         </section>
       )}
 
-      <div className="metricGrid">
-        <Metric label="등록 회원" value={`${activeCount}명`} onClick={() => setTab('members')} />
-        <Metric
-          label="상담만 한 회원"
-          value={`${consultationCount}명`}
-          onClick={() => setTab('consultations')}
-        />
-        <Metric
-          label="현재 대기"
-          value={`${waitlistCount}명`}
-          tone="warn"
-          onClick={() => setTab('consultations')}
-        />
-        <Metric
-          label="미납"
-          value={`${unpaidMembers.length}명`}
-          tone="danger"
-          onClick={() => setTab('payments')}
-        />
-      </div>
-
       <section className="panel">
         <h2>오늘 해야 할 수업</h2>
         <div className="listStack">
@@ -1234,8 +1204,7 @@ function HomeView({
                     {isLive && <em className="liveDot">진행 중</em>}
                   </strong>
                   <small>
-                    <MapPin size={12} /> {danceClass.location} · {danceClass.level} · 탭하면
-                    출석부
+                    <MapPin size={12} /> {danceClass.location} · 탭하면 출석부
                   </small>
                 </div>
                 <b className="rowCount">
@@ -1608,15 +1577,6 @@ function ScheduleView({
                     <input name="tuitionFee" type="number" min="0" defaultValue={danceClass.tuitionFee} />
                   </Field>
                 </div>
-                <Field label="레벨">
-                  <select name="level" defaultValue={danceClass.level}>
-                    <option>입문</option>
-                    <option>초급</option>
-                    <option>중급</option>
-                    <option>고급</option>
-                    <option>전체</option>
-                  </select>
-                </Field>
                 <button type="submit" className="secondaryButton">수정 저장</button>
                 <button
                   type="button"
@@ -1661,9 +1621,9 @@ function TimeClassCard({
     marks: Record<string, AttendanceStatus>,
   ) => void
 }) {
-  const [checking, setChecking] = useState(false)
+  const [mode, setMode] = useState<'idle' | 'check' | 'assign'>('idle')
   const [draft, setDraft] = useState<Record<string, AttendanceStatus>>({})
-  const [pickedMemberId, setPickedMemberId] = useState('')
+  const [picked, setPicked] = useState<Record<string, boolean>>({})
   const assignedMembers = members.filter(
     (member) => member.status === 'active' && member.classIds.includes(danceClass.id),
   )
@@ -1673,6 +1633,7 @@ function TimeClassCard({
   const checkedCount = assignedMembers.filter(
     (member) => attendance[attendanceKey(dateKey, danceClass.id, member.id)],
   ).length
+  const pickedCount = Object.values(picked).filter(Boolean).length
 
   function startChecking() {
     const initial: Record<string, AttendanceStatus> = {}
@@ -1681,12 +1642,20 @@ function TimeClassCard({
       if (status) initial[member.id] = status === 'makeup' ? 'present' : status
     })
     setDraft(initial)
-    setChecking(true)
+    setMode('check')
   }
 
   function confirmChecking() {
     onSaveAttendance(dateKey, danceClass.id, draft)
-    setChecking(false)
+    setMode('idle')
+  }
+
+  function confirmAssigning() {
+    Object.entries(picked).forEach(([memberId, isPicked]) => {
+      if (isPicked) onAssignMember(memberId, danceClass.id)
+    })
+    setPicked({})
+    setMode('idle')
   }
 
   return (
@@ -1702,12 +1671,28 @@ function TimeClassCard({
         </small>
       </div>
 
-      {!checking ? (
-        <button type="button" className="checkStartButton" onClick={startChecking}>
-          출석 체크
-          {assignedMembers.length > 0 && ` (${checkedCount}/${assignedMembers.length}명 완료)`}
-        </button>
-      ) : (
+      {mode === 'idle' && (
+        <div className="cardActions">
+          <button type="button" className="checkStartButton" onClick={startChecking}>
+            출석 체크
+            {assignedMembers.length > 0 && ` (${checkedCount}/${assignedMembers.length})`}
+          </button>
+          {candidates.length > 0 && (
+            <button
+              type="button"
+              className="assignStartButton"
+              onClick={() => {
+                setPicked({})
+                setMode('assign')
+              }}
+            >
+              + 회원 추가
+            </button>
+          )}
+        </div>
+      )}
+
+      {mode === 'check' && (
         <div className="draftRoster">
           {assignedMembers.map((member) => (
             <div className="draftRow" key={member.id}>
@@ -1736,7 +1721,7 @@ function TimeClassCard({
           ))}
           {!assignedMembers.length && <em className="draftEmpty">배정된 회원 없음</em>}
           <div className="draftFoot">
-            <button type="button" className="draftCancel" onClick={() => setChecking(false)}>
+            <button type="button" className="draftCancel" onClick={() => setMode('idle')}>
               취소
             </button>
             <button type="button" className="draftConfirm" onClick={confirmChecking}>
@@ -1746,31 +1731,35 @@ function TimeClassCard({
         </div>
       )}
 
-      {candidates.length > 0 && (
-        <div className="assignRow">
-          <select
-            value={pickedMemberId}
-            onChange={(event) => setPickedMemberId(event.target.value)}
-            aria-label="이 수업에 배정할 회원"
-          >
-            <option value="">기존 회원 수강 추가…</option>
-            {candidates.map((member) => (
-              <option value={member.id} key={member.id}>
-                {member.name}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            disabled={!pickedMemberId}
-            onClick={() => {
-              if (!pickedMemberId) return
-              onAssignMember(pickedMemberId, danceClass.id)
-              setPickedMemberId('')
-            }}
-          >
-            추가
-          </button>
+      {mode === 'assign' && (
+        <div className="draftRoster">
+          <p className="draftGuide">이 수업에 추가할 회원을 선택하세요</p>
+          {candidates.map((member) => (
+            <button
+              type="button"
+              className={picked[member.id] ? 'pickRow on' : 'pickRow'}
+              onClick={() =>
+                setPicked((current) => ({ ...current, [member.id]: !current[member.id] }))
+              }
+              key={member.id}
+            >
+              <span>{member.name}</span>
+              <b>{picked[member.id] ? '선택됨' : '선택'}</b>
+            </button>
+          ))}
+          <div className="draftFoot">
+            <button type="button" className="draftCancel" onClick={() => setMode('idle')}>
+              취소
+            </button>
+            <button
+              type="button"
+              className="draftConfirm"
+              disabled={!pickedCount}
+              onClick={confirmAssigning}
+            >
+              {pickedCount ? `${pickedCount}명 추가` : '회원을 선택하세요'}
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -1994,19 +1983,9 @@ function MembersView({
             ))}
           </select>
         </Field>
-        <div className="split">
-          <Field label="레벨">
-            <select name="level" defaultValue="초급">
-              <option>입문</option>
-              <option>초급</option>
-              <option>중급</option>
-              <option>고급</option>
-            </select>
-          </Field>
-          <Field label="총 횟수">
-            <input name="remainingCredits" type="number" min="0" placeholder="수강권 선택 시 자동" />
-          </Field>
-        </div>
+        <Field label="총 횟수">
+          <input name="remainingCredits" type="number" min="0" placeholder="수강권 선택 시 자동" />
+        </Field>
         <div className="split">
           <Field label="결제 금액">
             <input name="paidAmount" type="number" min="0" placeholder="수강권 기준 자동" />
@@ -2178,25 +2157,15 @@ function MembersView({
                       {!classes.length && <p className="emptyText">만든 수업이 없습니다.</p>}
                     </div>
                   </div>
-                  <div className="split">
-                    <Field label="레벨">
-                      <select name="level" defaultValue={member.level}>
-                        <option>입문</option>
-                        <option>초급</option>
-                        <option>중급</option>
-                        <option>고급</option>
-                      </select>
-                    </Field>
-                    <Field label="결제 유형">
-                      <select name="passType" defaultValue={member.passType}>
-                        <option>월회비</option>
-                        <option>10회권</option>
-                        <option>기간권</option>
-                        <option>상담</option>
-                        <option>대기</option>
-                      </select>
-                    </Field>
-                  </div>
+                  <Field label="결제 유형">
+                    <select name="passType" defaultValue={member.passType}>
+                      <option>월회비</option>
+                      <option>10회권</option>
+                      <option>기간권</option>
+                      <option>상담</option>
+                      <option>대기</option>
+                    </select>
+                  </Field>
                   <div className="split">
                     <Field label="총 횟수">
                       <input name="totalCredits" type="number" min="0" defaultValue={member.totalCredits} />
@@ -2301,14 +2270,6 @@ function ConsultationsView({
             </select>
           </Field>
         </div>
-        <Field label="레벨">
-          <select name="level" defaultValue="입문">
-            <option>입문</option>
-            <option>초급</option>
-            <option>중급</option>
-            <option>고급</option>
-          </select>
-        </Field>
         <Field label="관심 수업">
           <input name="interest" placeholder="예: 오전 초급반" />
         </Field>
