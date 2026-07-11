@@ -102,7 +102,6 @@ function sanitizeTemplate(text: string) {
 
 type SmsTemplates = typeof defaultSmsTemplates
 const startHour = 10
-const endHour = 22
 
 const seedClasses: DanceClass[] = [
   {
@@ -624,21 +623,25 @@ function App() {
     const capacity = type === 'private' ? 1 : Number(formData.get('capacity') ?? 12)
     const tuitionFee = Number(formData.get('tuitionFee') ?? 0)
     const level = String(formData.get('level') ?? '초급')
-    const classIds = templateWeekdays.map(() => makeId('class'))
+    // 개인레슨 수강권은 정해진 요일 수업을 만들지 않는다 (시간표에서 실시간 추가)
+    const classIds = type === 'private' ? [] : templateWeekdays.map(() => makeId('class'))
 
-    const newClasses = templateWeekdays.map((weekday, index) => ({
-      id: classIds[index],
-      name,
-      weekday,
-      startTime,
-      endTime,
-      location: type === 'private' ? '개인레슨' : type === 'external' ? '외부' : '스튜디오',
-      capacity,
-      tuitionFee,
-      level,
-    }))
+    const newClasses =
+      type === 'private'
+        ? []
+        : templateWeekdays.map((weekday, index) => ({
+            id: classIds[index],
+            name,
+            weekday,
+            startTime,
+            endTime,
+            location: type === 'external' ? '외부' : '스튜디오',
+            capacity,
+            tuitionFee,
+            level,
+          }))
 
-    setClasses((current) => [...newClasses, ...current])
+    if (newClasses.length) setClasses((current) => [...newClasses, ...current])
     setPassTemplates((current) => [
       {
         id: makeId('pass'),
@@ -723,25 +726,101 @@ function App() {
     notify('상담이 등록되었습니다')
   }
 
-  function updateClass(classId: string, formData: FormData) {
-    setClasses((current) =>
-      current.map((danceClass) =>
-        danceClass.id === classId
+  function updatePassTemplate(passId: string, formData: FormData) {
+    const pass = passTemplates.find((item) => item.id === passId)
+    if (!pass) return
+    const name = String(formData.get('name') || pass.name)
+    const sessionCount = Number(formData.get('sessionCount') ?? pass.sessionCount)
+    if (pass.type === 'private') {
+      // 개인레슨 수강권은 이름·횟수·가격만 관리한다
+      const fee = Number(formData.get('tuitionFee') ?? pass.tuitionFee)
+      setPassTemplates((current) =>
+        current.map((item) =>
+          item.id === passId ? { ...item, name, sessionCount, tuitionFee: fee } : item,
+        ),
+      )
+      notify('수강권이 수정되었습니다')
+      return
+    }
+    const startTime = String(formData.get('startTime') || pass.startTime)
+    const endTime = String(formData.get('endTime') || pass.endTime)
+    const capacity = Number(formData.get('capacity') || pass.capacity)
+    const tuitionFee = Number(formData.get('tuitionFee') ?? pass.tuitionFee)
+    const pickedWeekdays = formData
+      .getAll('weekdays')
+      .map(Number)
+      .filter((value) => Number.isFinite(value))
+    const nextWeekdays = pickedWeekdays.length ? pickedWeekdays : pass.weekdays
+
+    // 수강권의 시간·요일을 바꾸면 연결된 수업들이 같이 바뀐다
+    const linkedClasses = classes.filter((item) => pass.classIds.includes(item.id))
+    const defaultLocation = linkedClasses[0]?.location ?? '스튜디오'
+    const keptIds: string[] = []
+    const createdClasses: DanceClass[] = []
+    nextWeekdays.forEach((weekday) => {
+      const existing = linkedClasses.find((item) => item.weekday === weekday)
+      if (existing) {
+        keptIds.push(existing.id)
+      } else {
+        const id = makeId('class')
+        keptIds.push(id)
+        createdClasses.push({
+          id,
+          name,
+          weekday,
+          startTime,
+          endTime,
+          location: defaultLocation,
+          capacity,
+          tuitionFee,
+          level: '전체',
+        })
+      }
+    })
+    const removedIds = linkedClasses
+      .filter((item) => !nextWeekdays.includes(item.weekday))
+      .map((item) => item.id)
+
+    setClasses((current) => [
+      ...createdClasses,
+      ...current
+        .filter((item) => !removedIds.includes(item.id))
+        .map((item) =>
+          keptIds.includes(item.id)
+            ? { ...item, name, startTime, endTime, capacity, tuitionFee }
+            : item,
+        ),
+    ])
+    setMembers((current) =>
+      current.map((member) => {
+        const hadPassClass = member.classIds.some((id) => pass.classIds.includes(id))
+        let nextIds = member.classIds.filter((id) => !removedIds.includes(id))
+        if (hadPassClass) {
+          createdClasses.forEach((created) => {
+            if (!nextIds.includes(created.id)) nextIds = [...nextIds, created.id]
+          })
+        }
+        return { ...member, classIds: nextIds }
+      }),
+    )
+    setPassTemplates((current) =>
+      current.map((item) =>
+        item.id === passId
           ? {
-              ...danceClass,
-              name: String(formData.get('name') ?? danceClass.name),
-              weekday: Number(formData.get('weekday') ?? danceClass.weekday),
-              startTime: String(formData.get('startTime') ?? danceClass.startTime),
-              endTime: String(formData.get('endTime') ?? danceClass.endTime),
-              location: String(formData.get('location') ?? danceClass.location),
-              capacity: Number(formData.get('capacity') ?? danceClass.capacity),
-              tuitionFee: Number(formData.get('tuitionFee') ?? danceClass.tuitionFee),
-              level: String(formData.get('level') ?? danceClass.level),
+              ...item,
+              name,
+              sessionCount,
+              startTime,
+              endTime,
+              weekdays: nextWeekdays,
+              capacity,
+              tuitionFee,
+              classIds: keptIds,
             }
-          : danceClass,
+          : item,
       ),
     )
-    notify('수업 정보가 저장되었습니다')
+    notify('수강권이 수정되었습니다')
   }
 
   function markAttendance(
@@ -860,19 +939,19 @@ function App() {
     notify('출석이 저장되었습니다')
   }
 
-  function createSlotClass(weekday: number, hour: number, memberIds: string[]) {
+  function createSlotClass(weekday: number, startTime: string, memberIds: string[]) {
     const classId = makeId('class')
     const pickedMembers = members.filter((member) => memberIds.includes(member.id))
     const className =
       pickedMembers.length === 1 ? `${pickedMembers[0].name} 개인레슨` : '개인레슨'
-    const hourLabel = String(hour).padStart(2, '0')
+    const startMinutes = minutesFromTime(startTime)
     setClasses((current) => [
       {
         id: classId,
         name: className,
         weekday,
-        startTime: `${hourLabel}:00`,
-        endTime: `${hourLabel}:50`,
+        startTime: timeFromMinutes(startMinutes),
+        endTime: timeFromMinutes(startMinutes + 50),
         location: '개인레슨',
         capacity: Math.max(1, memberIds.length),
         tuitionFee: 0,
@@ -891,7 +970,7 @@ function App() {
           : member,
       ),
     )
-    notify(`${hourLabel}:00 수업이 만들어졌습니다`)
+    notify(`${timeFromMinutes(startMinutes)} 수업이 만들어졌습니다`)
   }
 
   function updateClassTime(classId: string, startTime: string) {
@@ -1172,7 +1251,6 @@ function App() {
           onCreateSlotClass={createSlotClass}
           onRemoveClass={removeClass}
           onSaveAttendance={saveClassAttendance}
-          onUpdateClass={updateClass}
           onUpdateClassTime={updateClassTime}
         />
       )}
@@ -1189,6 +1267,7 @@ function App() {
           onRemoveMember={removeMember}
           onRemovePassTemplate={removePassTemplate}
           onUpdateMember={updateMember}
+          onUpdatePassTemplate={updatePassTemplate}
           query={query}
           setQuery={setQuery}
         />
@@ -1556,21 +1635,19 @@ function ScheduleView({
   onCreateSlotClass,
   onRemoveClass,
   onSaveAttendance,
-  onUpdateClass,
   onUpdateClassTime,
 }: {
   attendance: AttendanceBook
   classes: DanceClass[]
   members: Member[]
   onAssignMember: (memberId: string, classId: string) => void
-  onCreateSlotClass: (weekday: number, hour: number, memberIds: string[]) => void
+  onCreateSlotClass: (weekday: number, startTime: string, memberIds: string[]) => void
   onRemoveClass: (classId: string) => void
   onSaveAttendance: (
     date: string,
     classId: string,
     marks: Record<string, AttendanceStatus>,
   ) => void
-  onUpdateClass: (classId: string, formData: FormData) => void
   onUpdateClassTime: (classId: string, startTime: string) => void
 }) {
   const weekDates = getWeekDates(today)
@@ -1579,11 +1656,15 @@ function ScheduleView({
     () => new Date(today.getFullYear(), today.getMonth(), 1),
   )
   const monthDates = getMonthDates(viewMonth)
-  const classHours = classes.map((danceClass) => hourFromTime(danceClass.startTime))
-  const firstHour = classHours.length ? Math.min(startHour, ...classHours) : startHour
-  const lastHour = classHours.length ? Math.max(endHour, ...classHours) : endHour
-  const hourRows = Array.from({ length: lastHour - firstHour + 1 }, (_, index) => firstHour + index)
   const selectedWeekday = selectedDate.getDay()
+  // 확정된 수업이 있는 시간만 보여준다
+  const dayClassHours = [
+    ...new Set(
+      classes
+        .filter((danceClass) => danceClass.weekday === selectedWeekday)
+        .map((danceClass) => hourFromTime(danceClass.startTime)),
+    ),
+  ].sort((a, b) => a - b)
   const selectedDateKey = toDateKey(selectedDate)
   const classColorIndex = new Map(classes.map((danceClass, index) => [danceClass.id, index % 6]))
 
@@ -1676,14 +1757,15 @@ function ScheduleView({
                   key={dateKey}
                 >
                   <b>{date.getDate()}</b>
-                  {dayClasses.map((danceClass) => (
-                    <span
-                      className={`eventChip chip-${classColorIndex.get(danceClass.id) ?? 0}`}
-                      key={danceClass.id}
-                    >
-                      {danceClass.name}
-                    </span>
-                  ))}
+                  <span className="dotRow">
+                    {dayClasses.slice(0, 4).map((danceClass) => (
+                      <i
+                        className={`dot chip-${classColorIndex.get(danceClass.id) ?? 0}`}
+                        key={danceClass.id}
+                      />
+                    ))}
+                    {dayClasses.length > 4 && <em className="dotMore">+{dayClasses.length - 4}</em>}
+                  </span>
                 </button>
               )
             })}
@@ -1695,16 +1777,16 @@ function ScheduleView({
           <span>{weekdays[selectedWeekday]}요일 {formatMonthDay(selectedDate)} 수업만 보기</span>
         </div>
         <div className="hourTimeline">
-          {hourRows.map((hour) => {
+          {dayClassHours.map((hour) => {
             const rowClasses = classes
               .filter(
                 (danceClass) =>
                   danceClass.weekday === selectedWeekday &&
                   hourFromTime(danceClass.startTime) === hour,
               )
-              .sort((a, b) => a.weekday - b.weekday || a.startTime.localeCompare(b.startTime))
+              .sort((a, b) => a.startTime.localeCompare(b.startTime))
             return (
-              <article className={rowClasses.length ? 'hourRow hasClass' : 'hourRow'} key={hour}>
+              <article className="hourRow hasClass" key={hour}>
                 <div className="hourStamp">{hour}:00</div>
                 <div className="hourCards">
                   {rowClasses.map((danceClass) => (
@@ -1720,104 +1802,22 @@ function ScheduleView({
                       key={danceClass.id}
                     />
                   ))}
-                  {!rowClasses.length && (
-                    <EmptySlot
-                      hour={hour}
-                      members={members}
-                      onCreate={(memberIds) =>
-                        onCreateSlotClass(selectedWeekday, hour, memberIds)
-                      }
-                    />
-                  )}
                 </div>
               </article>
             )
           })}
+          {!dayClassHours.length && (
+            <p className="emptyText">이 날은 확정된 수업이 없어요.</p>
+          )}
+          <QuickAddClass
+            members={members}
+            onCreate={(startTime, memberIds) =>
+              onCreateSlotClass(selectedWeekday, startTime, memberIds)
+            }
+          />
         </div>
       </section>
 
-      <section className="panel">
-        <h2>그룹 수업 관리</h2>
-        <p className="hint storageHint">
-          단체반의 이름·시간·장소 변경과 폐강은 여기서, 개인레슨은 시간표에서 바로
-          변경·삭제해요.
-        </p>
-        <div className="listStack">
-          {classes.filter((danceClass) => !isPrivateClass(danceClass)).map((danceClass) => (
-            <details className="classEditor" key={danceClass.id}>
-              <summary>
-                <span>
-                  <strong>{danceClass.name}</strong>
-                  <small>
-                    {weekdays[danceClass.weekday]} {danceClass.startTime} ·{' '}
-                    {formatCurrency(danceClass.tuitionFee)}
-                  </small>
-                </span>
-                <Settings2 size={17} />
-              </summary>
-              <form
-                className="formGrid compact"
-                onSubmit={(event) => {
-                  event.preventDefault()
-                  onUpdateClass(danceClass.id, new FormData(event.currentTarget))
-                }}
-              >
-                <Field label="수업 이름">
-                  <input name="name" defaultValue={danceClass.name} />
-                </Field>
-                <div className="split">
-                  <Field label="요일">
-                    <select name="weekday" defaultValue={danceClass.weekday}>
-                      {weekdays.map((day, index) => (
-                        <option value={index} key={day}>
-                          {day}요일
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                  <Field label="정원">
-                    <input name="capacity" type="number" min="1" defaultValue={danceClass.capacity} />
-                  </Field>
-                </div>
-                <div className="split">
-                  <Field label="시작 시간">
-                    <input name="startTime" type="time" defaultValue={danceClass.startTime} />
-                  </Field>
-                  <Field label="종료 시간">
-                    <input name="endTime" type="time" defaultValue={danceClass.endTime} />
-                  </Field>
-                </div>
-                <div className="split">
-                  <Field label="장소">
-                    <input name="location" defaultValue={danceClass.location} />
-                  </Field>
-                  <Field label="수강료">
-                    <input name="tuitionFee" type="number" min="0" defaultValue={danceClass.tuitionFee} />
-                  </Field>
-                </div>
-                <div className="formActions">
-                  <button type="submit" className="secondaryButton">수정 저장</button>
-                  <button
-                    type="button"
-                    className="dangerButton"
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          `'${danceClass.name}' 수업을 삭제할까요? 배정된 회원은 수업 미지정 상태가 됩니다.`,
-                        )
-                      ) {
-                        onRemoveClass(danceClass.id)
-                      }
-                    }}
-                  >
-                    삭제
-                  </button>
-                </div>
-              </form>
-            </details>
-          ))}
-        </div>
-      </section>
     </section>
   )
 }
@@ -2022,18 +2022,17 @@ function TimeClassCard({
   )
 }
 
-function EmptySlot({
-  hour,
+function QuickAddClass({
   members,
   onCreate,
 }: {
-  hour: number
   members: Member[]
-  onCreate: (memberIds: string[]) => void
+  onCreate: (startTime: string, memberIds: string[]) => void
 }) {
   const [open, setOpen] = useState(false)
   const [picked, setPicked] = useState<Record<string, boolean>>({})
   const [searchTerm, setSearchTerm] = useState('')
+  const [startTime, setStartTime] = useState('10:00')
   const pickedCount = Object.values(picked).filter(Boolean).length
   const searched = searchTerm
     ? members.filter((member) =>
@@ -2052,17 +2051,24 @@ function EmptySlot({
           setOpen(true)
         }}
       >
-        + 이 시간에 수업 만들기
+        + 이 날짜에 수업·개인레슨 바로 추가
       </button>
     )
   }
 
   return (
     <div className="timeClassCard">
-      <p className="draftGuide">
-        {hour}:00 수업에 넣을 회원을 검색해서 선택하세요
-      </p>
       <div className="draftRoster slotRoster">
+        <div className="labelRow">
+          <span>시작 시간</span>
+        </div>
+        <input
+          type="time"
+          value={startTime}
+          onChange={(event) => setStartTime(event.target.value)}
+          aria-label="시작 시간"
+        />
+        <p className="draftGuide">수업에 넣을 회원을 검색해서 선택하세요</p>
         <input
           type="search"
           className="pickSearch"
@@ -2105,6 +2111,7 @@ function EmptySlot({
             disabled={!pickedCount}
             onClick={() => {
               onCreate(
+                startTime,
                 Object.entries(picked)
                   .filter(([, isPicked]) => isPicked)
                   .map(([memberId]) => memberId),
@@ -2112,7 +2119,7 @@ function EmptySlot({
               setOpen(false)
             }}
           >
-            {pickedCount ? `${pickedCount}명으로 수업 만들기` : '회원을 선택하세요'}
+            {pickedCount ? `${startTime}에 ${pickedCount}명 수업 만들기` : '회원을 선택하세요'}
           </button>
         </div>
       </div>
@@ -2132,6 +2139,7 @@ function MembersView({
   onRemoveMember,
   onRemovePassTemplate,
   onUpdateMember,
+  onUpdatePassTemplate,
   query,
   setQuery,
 }: {
@@ -2146,6 +2154,7 @@ function MembersView({
   onRemoveMember: (memberId: string) => void
   onRemovePassTemplate: (passId: string) => void
   onUpdateMember: (memberId: string, formData: FormData) => void
+  onUpdatePassTemplate: (passId: string, formData: FormData) => void
   query: string
   setQuery: (query: string) => void
 }) {
@@ -2278,25 +2287,29 @@ function MembersView({
         <Field label="수강권 이름">
           <input name="name" placeholder="예: 초급 라인댄스 8회" required />
         </Field>
-        <div className="split">
-          <Field label="시작 시간">
-            <input name="startTime" type="time" defaultValue="10:00" />
-          </Field>
-          <Field label="종료 시간">
-            <input name="endTime" type="time" defaultValue="10:50" />
-          </Field>
-        </div>
-        <div className="field">
-          <span>매주 수업 요일</span>
-          <div className="weekdayPicker" aria-label="매주 수업 요일">
-            {weekdays.map((day, index) => (
-              <label key={day}>
-                <input name="weekdays" type="checkbox" value={index} defaultChecked={index === today.getDay()} />
-                <span>{day}</span>
-              </label>
-            ))}
-          </div>
-        </div>
+        {passFormType !== 'private' && (
+          <>
+            <div className="split">
+              <Field label="시작 시간">
+                <input name="startTime" type="time" defaultValue="10:00" />
+              </Field>
+              <Field label="종료 시간">
+                <input name="endTime" type="time" defaultValue="10:50" />
+              </Field>
+            </div>
+            <div className="field">
+              <span>매주 수업 요일</span>
+              <div className="weekdayPicker" aria-label="매주 수업 요일">
+                {weekdays.map((day, index) => (
+                  <label key={day}>
+                    <input name="weekdays" type="checkbox" value={index} defaultChecked={index === today.getDay()} />
+                    <span>{day}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
         {passFormType === 'private' ? (
           <Field label="수강료">
             <input name="tuitionFee" type="number" min="0" defaultValue="90000" />
@@ -2311,32 +2324,130 @@ function MembersView({
             </Field>
           </div>
         )}
-        {passTemplates.length > 0 && (
-          <div className="field">
-            <span>만든 수강권</span>
-            <div className="passList">
+        {passFormType === 'private' && (
+          <p className="hint ruleHint">
+            개인레슨은 횟수·가격만 정하면 돼요. 실제 수업 일정은 시간표에서 실시간으로
+            추가합니다.
+          </p>
+        )}
+      </FormDrawer>
+
+      {passTemplates.length > 0 && (
+        <details className="formDrawer">
+          <summary>
+            <span>
+              <strong>만든 수강권 관리</strong>
+              <small>수강권을 누르면 시간·요일·가격을 수정할 수 있어요</small>
+            </span>
+            <i className="drawerIcon static" aria-hidden="true">
+              <Settings2 size={16} />
+            </i>
+          </summary>
+          <div className="drawerBody">
+            <div className="listStack">
               {passTemplates.map((pass) => (
-                <div className="passListItem" key={pass.id}>
-                  <span>
-                    {passCategoryLabel(pass.type)} · {pass.name}
-                    {pass.sessionCount > 0 && ` (${pass.sessionCount}회)`}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (window.confirm(`'${pass.name}' 수강권을 삭제할까요? 이미 등록된 회원에게는 영향이 없습니다.`)) {
-                        onRemovePassTemplate(pass.id)
-                      }
+                <details className="classEditor" key={pass.id}>
+                  <summary>
+                    <span>
+                      <strong>{pass.name}</strong>
+                      <small>
+                        {passCategoryLabel(pass.type)}
+                        {pass.sessionCount > 0 && ` · ${pass.sessionCount}회`}
+                        {pass.type !== 'private' &&
+                          ` · ${pass.weekdays.map((day) => weekdays[day]).join('')} ${pass.startTime}`}
+                      </small>
+                    </span>
+                    <Settings2 size={16} />
+                  </summary>
+                  <form
+                    className="formGrid compact"
+                    onSubmit={(event) => {
+                      event.preventDefault()
+                      onUpdatePassTemplate(pass.id, new FormData(event.currentTarget))
                     }}
                   >
-                    삭제
-                  </button>
-                </div>
+                          <Field label="수강권 이름">
+                            <input name="name" defaultValue={pass.name} />
+                          </Field>
+                          <div className="split">
+                            <Field label="수업 횟수">
+                              <input
+                                name="sessionCount"
+                                type="number"
+                                min="0"
+                                defaultValue={pass.sessionCount}
+                              />
+                            </Field>
+                            <Field label="수강료">
+                              <input
+                                name="tuitionFee"
+                                type="number"
+                                min="0"
+                                defaultValue={pass.tuitionFee}
+                              />
+                            </Field>
+                          </div>
+                          {pass.type !== 'private' && (
+                            <>
+                              <div className="split">
+                                <Field label="시작 시간">
+                                  <input name="startTime" type="time" defaultValue={pass.startTime} />
+                                </Field>
+                                <Field label="종료 시간">
+                                  <input name="endTime" type="time" defaultValue={pass.endTime} />
+                                </Field>
+                              </div>
+                              <div className="field">
+                                <span>매주 수업 요일</span>
+                                <div className="weekdayPicker">
+                                  {weekdays.map((day, index) => (
+                                    <label key={day}>
+                                      <input
+                                        name="weekdays"
+                                        type="checkbox"
+                                        value={index}
+                                        defaultChecked={pass.weekdays.includes(index)}
+                                      />
+                                      <span>{day}</span>
+                                    </label>
+                                  ))}
+                                </div>
+                              </div>
+                              <Field label="최대 인원">
+                                <input
+                                  name="capacity"
+                                  type="number"
+                                  min="1"
+                                  defaultValue={pass.capacity}
+                                />
+                              </Field>
+                            </>
+                          )}
+                          <div className="formActions">
+                            <button type="submit" className="secondaryButton">저장</button>
+                            <button
+                              type="button"
+                              className="dangerButton"
+                              onClick={() => {
+                                if (
+                                  window.confirm(
+                                    `'${pass.name}' 수강권과 연결된 수업을 삭제할까요?`,
+                                  )
+                                ) {
+                                  onRemovePassTemplate(pass.id)
+                                }
+                              }}
+                            >
+                              삭제
+                            </button>
+                          </div>
+                  </form>
+                </details>
               ))}
             </div>
           </div>
-        )}
-      </FormDrawer>
+        </details>
+      )}
 
       <FormDrawer id="drawer-member" title="등록 회원 추가" hint="새 회원의 기본 정보와 결제 내역을 입력" action={onAddMember}>
         <Field label="이름">
@@ -2840,6 +2951,9 @@ function AttendanceView({
         <div className="listStack">
           {memberStats.map(({ absent, lastPresent, member, monthPresent, present, records }) => {
             const usedCredits = Math.max(0, member.totalCredits - member.remainingCredits)
+            const dueDays = daysUntil(member.nextPaymentDue || member.passUntil)
+            const isCountOnly =
+              member.totalCredits > 0 && !member.nextPaymentDue && !member.passUntil
             return (
               <article className="memberStatRow" key={member.id}>
                 <div className="taskAvatar">{member.name.slice(0, 1)}</div>
@@ -2848,12 +2962,23 @@ function AttendanceView({
                   <span>{member.passType}</span>
                 </div>
                 <div className="statBig">
-                  <b>{present}</b>
-                  <span>
-                    {member.totalCredits > 0
-                      ? ` / ${member.totalCredits}회 출석`
-                      : '회 출석'}
-                  </span>
+                  {isCountOnly ? (
+                    <>
+                      <b className={member.remainingCredits <= 2 ? 'unpaid' : ''}>
+                        {member.remainingCredits}
+                      </b>
+                      <span>/{member.totalCredits}회 남음</span>
+                    </>
+                  ) : dueDays !== null ? (
+                    <>
+                      <b className={dueDays < 0 ? 'unpaid' : ''}>
+                        {dueDays < 0 ? `${Math.abs(dueDays)}일` : `${dueDays}일`}
+                      </b>
+                      <span>{dueDays < 0 ? '지남' : '남음'}</span>
+                    </>
+                  ) : (
+                    <span>-</span>
+                  )}
                 </div>
                 {member.totalCredits > 0 && (
                   <div

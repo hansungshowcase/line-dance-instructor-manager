@@ -18,9 +18,18 @@ test('instructor can manage classes, members, attendance, and payment details', 
   await page.getByRole('button', { name: '시간표', exact: true }).click()
   await expect(page.getByText('10시 이후 시간대별 보기')).toBeVisible()
   await expect(page.getByText('초급 라인댄스').first()).toBeVisible()
-  await page.locator('details.classEditor').first().locator('summary').click()
-  await page.locator('details.classEditor').first().locator('input[name="tuitionFee"]').fill('95000')
-  await page.locator('details.classEditor').first().getByRole('button', { name: '수정 저장' }).click()
+
+  // 수강권 편집에서 수강료를 바꾸면 연결된 수업에 바로 반영된다
+  await page.getByRole('button', { name: '회원', exact: true }).click()
+  const manageDrawer = page.locator('details.formDrawer').filter({ hasText: '만든 수강권 관리' })
+  await manageDrawer.locator('summary').first().click()
+  const passEditor = manageDrawer
+    .locator('details.classEditor')
+    .filter({ hasText: '초급 라인댄스 월수강권' })
+  await passEditor.locator('summary').click()
+  await passEditor.locator('input[name="tuitionFee"]').fill('95000')
+  await passEditor.getByRole('button', { name: '저장', exact: true }).click()
+  await page.getByRole('button', { name: '시간표', exact: true }).click()
   await expect(page.getByText('₩95,000').first()).toBeVisible()
 
   await page.getByRole('button', { name: '회원', exact: true }).click()
@@ -37,7 +46,7 @@ test('instructor can manage classes, members, attendance, and payment details', 
 
   // 새 수강권을 만들면 등록 회원 추가 폼의 수강권 목록에 즉시 반영되어야 한다
   const passDrawer = page.locator('details.formDrawer').filter({ hasText: '수강권 만들기' })
-  await passDrawer.locator('summary').click()
+  await passDrawer.locator('summary').first().click()
   await passDrawer.locator('input[name="name"]').fill('야간 라틴 8회')
   await passDrawer.getByRole('button', { name: '수강권 저장' }).click()
   await expect(

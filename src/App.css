@@ -835,106 +835,91 @@ button.rowItem:active {
 }
 
 .monthGrid button {
-  min-height: 64px;
+  height: 54px;
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  align-items: flex-start;
-  border-right: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
+  gap: 4px;
+  align-items: center;
+  justify-content: center;
   background: var(--panel);
   color: var(--ink);
-  padding: 6px 3px;
-}
-
-.eventChip,
-.moreChip {
-  flex: 0 0 auto;
-}
-
-.monthGrid button:nth-child(7n) {
-  border-right: 0;
+  padding: 4px 2px;
 }
 
 .monthGrid b {
-  font-size: 12px;
+  display: grid;
+  place-items: center;
+  min-width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  font-size: 14px;
   font-weight: 600;
-  padding-left: 2px;
 }
 
-.eventChip {
-  width: 100%;
-  overflow: hidden;
-  border-radius: 4px;
-  padding: 2px 4px;
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 9px;
-  font-weight: 700;
-  line-height: 1.4;
+.dotRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: 7px;
 }
 
-.chip-0 {
-  background: #e3f3ec;
-  color: #0c6e3c;
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
 }
 
-.chip-1 {
-  background: #e9edfe;
-  color: #4055c8;
+.dot.chip-0 {
+  background: #12a15c;
 }
 
-.chip-2 {
-  background: #fdefdc;
-  color: #99610a;
+.dot.chip-1 {
+  background: #5d7bf7;
 }
 
-.chip-3 {
-  background: #fdeaf3;
-  color: #b13277;
+.dot.chip-2 {
+  background: #e58f00;
 }
 
-.chip-4 {
-  background: #efe9fe;
-  color: #6a41cf;
+.dot.chip-3 {
+  background: #e0559a;
 }
 
-.chip-5 {
-  background: #fbf5d8;
-  color: #8a7104;
+.dot.chip-4 {
+  background: #8a5cf6;
 }
 
-.moreChip {
+.dot.chip-5 {
+  background: #c9a227;
+}
+
+.dotMore {
   color: var(--muted);
   font-size: 9px;
   font-style: normal;
   font-weight: 700;
-  padding-left: 2px;
 }
 
 .monthGrid .outside {
   color: #bcc1cd;
-  background: #fbfcfe;
 }
 
-.monthGrid .outside .eventChip {
-  opacity: 0.4;
+.monthGrid .outside .dot {
+  opacity: 0.35;
 }
 
 .monthGrid .today b {
-  display: grid;
-  place-items: center;
-  min-width: 20px;
-  height: 20px;
-  border-radius: 999px;
   background: var(--primary);
   color: white;
 }
 
-.monthGrid .selected {
-  background: var(--primary-soft);
-  box-shadow: inset 0 0 0 2px rgba(109, 135, 250, 0.45);
+.monthGrid .selected b {
+  box-shadow: inset 0 0 0 2px var(--primary);
+}
+
+.monthGrid .selected.today b {
+  box-shadow: none;
 }
 
 /* ---------- 접이식 입력 서랍 ---------- */
@@ -1046,7 +1031,7 @@ button.rowItem:active {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
-  align-items: end;
+  align-items: start;
 }
 
 input,
@@ -1071,6 +1056,37 @@ textarea {
   font-weight: 500;
   line-height: 1.25;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* 아이폰 기본 스타일 제거: 날짜·시간·선택창 높이와 글자 정렬을 통일한다 */
+input:not([type='checkbox']):not([type='radio']),
+select,
+textarea {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238b91a0' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 13px center;
+  padding-right: 38px;
+}
+
+input[type='date'],
+input[type='time'] {
+  height: 50px;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+input::-webkit-date-and-time-value {
+  text-align: left;
+}
+
+input[type='search']::-webkit-search-decoration,
+input[type='search']::-webkit-search-cancel-button {
+  -webkit-appearance: none;
 }
 
 input::placeholder,
