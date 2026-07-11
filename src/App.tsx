@@ -4,6 +4,7 @@ import {
   ChevronRight,
   CircleDollarSign,
   ClipboardList,
+  Download,
   Home,
   MapPin,
   MessageCircle,
@@ -80,6 +81,7 @@ const weekdays = ['일', '월', '화', '수', '목', '금', '토']
 const today = new Date()
 const todayKey = toDateKey(today)
 const storageKey = 'line-dance-manager-v2'
+const backupKey = 'line-dance-backup-at'
 const startHour = 10
 const endHour = 22
 
@@ -410,6 +412,7 @@ function App() {
   const [selectedClassId, setSelectedClassId] = useState(seedClasses[0].id)
   const [attendanceDate, setAttendanceDate] = useState(todayKey)
   const [convertedMemberId, setConvertedMemberId] = useState<string | null>(null)
+  const [lastBackupAt, setLastBackupAt] = useState(() => localStorage.getItem(backupKey) ?? '')
 
   useEffect(() => {
     window.scrollTo(0, 0)
@@ -439,6 +442,13 @@ function App() {
   const expiringOnly = expiringMembers.filter(
     (member) => !lowCreditMembers.some((lowCredit) => lowCredit.id === member.id),
   )
+  const seedMemberIds = new Set(seedMembers.map((member) => member.id))
+  const hasSampleData = members.some((member) => seedMemberIds.has(member.id))
+  const hasRealData = members.some((member) => !seedMemberIds.has(member.id))
+  const backupAgeDays = lastBackupAt
+    ? Math.floor((today.getTime() - new Date(lastBackupAt).getTime()) / 86400000)
+    : null
+  const backupOverdue = hasRealData && (backupAgeDays === null || backupAgeDays >= 14)
   const fabDrawerId = {
     home: null,
     schedule: null,
@@ -772,6 +782,36 @@ function App() {
     link.download = `라인댄스-백업-${todayKey}.json`
     link.click()
     URL.revokeObjectURL(url)
+    localStorage.setItem(backupKey, todayKey)
+    setLastBackupAt(todayKey)
+  }
+
+  function openAttendance(classId: string) {
+    setSelectedClassId(classId)
+    setAttendanceDate(todayKey)
+    setTab('attendance')
+  }
+
+  function clearSampleData() {
+    if (
+      !window.confirm(
+        '샘플 회원·수업·수강권을 모두 지울까요? 직접 등록한 데이터는 그대로 남습니다.',
+      )
+    )
+      return
+    const sampleClassIds = new Set(seedClasses.map((danceClass) => danceClass.id))
+    const samplePassIds = new Set(seedPassTemplates.map((pass) => pass.id))
+    setMembers((current) => current.filter((member) => !seedMemberIds.has(member.id)))
+    setClasses((current) => current.filter((danceClass) => !sampleClassIds.has(danceClass.id)))
+    setPassTemplates((current) => current.filter((pass) => !samplePassIds.has(pass.id)))
+    setAttendance((current) =>
+      Object.fromEntries(
+        Object.entries(current).filter(([key]) => {
+          const [, classId, memberId] = key.split('|')
+          return !seedMemberIds.has(memberId) && !sampleClassIds.has(classId)
+        }),
+      ),
+    )
   }
 
   function importData(file: File) {
@@ -853,12 +893,17 @@ function App() {
       {tab === 'home' && (
         <HomeView
           activeCount={activeMembers.length}
+          backupAgeDays={backupAgeDays}
+          backupOverdue={backupOverdue}
           consultationCount={consultationMembers.length}
           expiringMembers={expiringOnly}
+          hasSampleData={hasSampleData}
           lowCreditMembers={lowCreditMembers}
           members={members}
+          onClearSamples={clearSampleData}
           onExport={exportData}
           onImport={importData}
+          onOpenAttendance={openAttendance}
           setTab={setTab}
           todayClasses={todayClasses}
           unpaidMembers={unpaidMembers}
@@ -979,24 +1024,34 @@ function App() {
 
 function HomeView({
   activeCount,
+  backupAgeDays,
+  backupOverdue,
   consultationCount,
   expiringMembers,
+  hasSampleData,
   lowCreditMembers,
   members,
+  onClearSamples,
   onExport,
   onImport,
+  onOpenAttendance,
   setTab,
   todayClasses,
   unpaidMembers,
   waitlistCount,
 }: {
   activeCount: number
+  backupAgeDays: number | null
+  backupOverdue: boolean
   consultationCount: number
   expiringMembers: Member[]
+  hasSampleData: boolean
   lowCreditMembers: Member[]
   members: Member[]
+  onClearSamples: () => void
   onExport: () => void
   onImport: (file: File) => void
+  onOpenAttendance: (classId: string) => void
   setTab: (tab: Tab) => void
   todayClasses: DanceClass[]
   unpaidMembers: Member[]
@@ -1035,6 +1090,18 @@ function HomeView({
         </button>
       </section>
 
+      {hasSampleData && (
+        <section className="sampleBanner">
+          <p>
+            <b>지금 보이는 회원·수업은 연습용 샘플이에요.</b> 사용법을 익힌 뒤 지우고
+            시작하세요.
+          </p>
+          <button type="button" onClick={onClearSamples}>
+            샘플 모두 지우기
+          </button>
+        </section>
+      )}
+
       <div className="metricGrid">
         <Metric label="등록 회원" value={`${activeCount}명`} onClick={() => setTab('members')} />
         <Metric
@@ -1065,7 +1132,12 @@ function HomeView({
             ).length
             const isLive = ongoingClass?.id === danceClass.id
             return (
-              <article className={isLive ? 'rowItem live' : 'rowItem'} key={danceClass.id}>
+              <button
+                type="button"
+                className={isLive ? 'rowItem live' : 'rowItem'}
+                onClick={() => onOpenAttendance(danceClass.id)}
+                key={danceClass.id}
+              >
                 <div className="rowTime">
                   <b>{danceClass.startTime}</b>
                   <span>{danceClass.endTime}</span>
@@ -1076,14 +1148,16 @@ function HomeView({
                     {isLive && <em className="liveDot">진행 중</em>}
                   </strong>
                   <small>
-                    <MapPin size={12} /> {danceClass.location} · {danceClass.level}
+                    <MapPin size={12} /> {danceClass.location} · {danceClass.level} · 탭하면
+                    출석부
                   </small>
                 </div>
                 <b className="rowCount">
                   {assigned}
                   <span>/{danceClass.capacity}</span>
                 </b>
-              </article>
+                <ChevronRight size={16} className="rowChevron" />
+              </button>
             )
           })}
           {!sortedToday.length && <p className="emptyText">오늘 등록된 수업이 없습니다.</p>}
@@ -1161,9 +1235,28 @@ function HomeView({
               </a>
             </article>
           ))}
-          {!unpaidMembers.length && !expiringMembers.length && !lowCreditMembers.length && (
-            <p className="emptyText">긴급 확인 항목이 없습니다.</p>
+          {backupOverdue && (
+            <article className="taskRow warn" key="backup-task">
+              <div className="taskAvatar">
+                <Download size={17} />
+              </div>
+              <div className="taskBody">
+                <strong>데이터 백업</strong>
+                <span>
+                  {backupAgeDays === null
+                    ? '아직 백업한 적이 없어요'
+                    : `마지막 백업 후 ${backupAgeDays}일 지남`}
+                </span>
+              </div>
+              <button type="button" className="callButton" onClick={onExport} aria-label="지금 백업">
+                <Download size={17} />
+              </button>
+            </article>
           )}
+          {!unpaidMembers.length &&
+            !expiringMembers.length &&
+            !lowCreditMembers.length &&
+            !backupOverdue && <p className="emptyText">긴급 확인 항목이 없습니다.</p>}
         </div>
       </section>
 
@@ -1172,6 +1265,7 @@ function HomeView({
         <p className="hint ruleHint">
           모든 데이터는 이 기기에만 저장됩니다. 폰을 바꾸거나 브라우저 데이터를 지우면 사라지니
           주기적으로 파일로 내보내 두세요.
+          {backupAgeDays !== null && ` (마지막 백업: ${backupAgeDays === 0 ? '오늘' : `${backupAgeDays}일 전`})`}
         </p>
         <div className="split backupActions">
           <button type="button" className="secondaryButton" onClick={onExport}>
@@ -2298,6 +2392,11 @@ function PaymentsView({
   const monthTotal = allPayments
     .filter((payment) => payment.date.startsWith(monthKey))
     .reduce((sum, payment) => sum + payment.amount, 0)
+  const lastMonthDate = new Date(today.getFullYear(), today.getMonth() - 1, 1)
+  const lastMonthKey = `${lastMonthDate.getFullYear()}-${String(lastMonthDate.getMonth() + 1).padStart(2, '0')}`
+  const lastMonthTotal = allPayments
+    .filter((payment) => payment.date.startsWith(lastMonthKey))
+    .reduce((sum, payment) => sum + payment.amount, 0)
   const visibleMembers =
     statusFilter === 'all'
       ? members
@@ -2314,6 +2413,7 @@ function PaymentsView({
       <section className="paymentHero">
         <p>이번 달 수납액</p>
         <strong>{formatCurrency(monthTotal)}</strong>
+        <span>지난달 {formatCurrency(lastMonthTotal)}</span>
         <span>완납 {counts.paid} · 임박 {counts.soon} · 미납 {counts.unpaid}</span>
       </section>
 

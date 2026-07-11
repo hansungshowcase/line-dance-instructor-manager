@@ -81,6 +81,41 @@
 
 /* ---------- 지표 카드 ---------- */
 
+.sampleBanner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid rgba(192, 127, 20, 0.28);
+  border-radius: var(--radius-md);
+  background: var(--warn-soft);
+  padding: 13px 14px;
+}
+
+.sampleBanner p {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  color: var(--sub);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.sampleBanner p b {
+  color: var(--warn);
+  font-weight: 700;
+}
+
+.sampleBanner button {
+  flex: 0 0 auto;
+  min-height: 40px;
+  border-radius: 999px;
+  background: var(--warn);
+  color: white;
+  padding: 9px 13px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .metricGrid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -203,9 +238,21 @@
 .rowItem {
   display: flex;
   align-items: center;
-  gap: 13px;
+  gap: 11px;
+  width: 100%;
   padding: 14px;
   border-radius: var(--radius-md);
+  text-align: left;
+  transition: transform 0.15s ease;
+}
+
+button.rowItem:active {
+  transform: scale(0.98);
+}
+
+.rowChevron {
+  flex: 0 0 auto;
+  color: var(--line-strong);
 }
 
 .rowItem.live {
@@ -1854,6 +1901,10 @@ button {
   padding: 6px 11px;
   font-size: 12px;
   font-weight: 600;
+}
+
+.paymentHero span + span {
+  margin-left: 6px;
 }
 
 .paymentFilters {

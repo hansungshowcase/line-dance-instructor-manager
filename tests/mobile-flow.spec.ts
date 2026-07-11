@@ -93,4 +93,9 @@ test('instructor can manage classes, members, attendance, and payment details', 
   const historyRow = page.locator('.memberStatRow').filter({ hasText: '김미영' })
   await historyRow.locator('details.historyDetails summary').click()
   await expect(historyRow.locator('.historyDetails li').first()).toBeVisible()
+
+  // 홈의 오늘 수업을 탭하면 해당 수업 출석부로 바로 이동
+  await page.getByRole('button', { name: '홈' }).click()
+  await page.locator('button.rowItem').first().click()
+  await expect(page.getByRole('heading', { name: '출석 체크' })).toBeVisible()
 })
