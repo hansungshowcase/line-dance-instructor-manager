@@ -1679,11 +1679,45 @@ button {
 
 .memberStatRow {
   display: grid;
-  grid-template-columns: 42px 1fr;
+  grid-template-columns: 42px 1fr auto;
   gap: 10px 12px;
   align-items: center;
   padding: 13px 14px;
   border-radius: var(--radius-md);
+}
+
+.statBig {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  justify-self: end;
+}
+
+.statBig b {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.statBig span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.dueNotice {
+  margin: 0;
+  border-radius: var(--radius-sm);
+  background: var(--danger-soft);
+  color: var(--danger);
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.dueNotice b {
+  font-size: 15px;
 }
 
 .statBody strong {
@@ -2527,26 +2561,22 @@ button {
   cursor: default;
 }
 
-.tokenChips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-}
-
-.tokenChips button {
+.copyButton {
+  align-self: flex-end;
   min-height: 40px;
-  border: 1px dashed var(--primary);
+  border: 1px solid var(--line-strong);
   border-radius: 999px;
-  background: var(--primary-soft);
+  background: white;
   color: var(--primary-deep);
-  padding: 8px 14px;
+  padding: 9px 18px;
   font-size: 13px;
   font-weight: 700;
-  transition: transform 0.15s ease;
+  transition: all 0.15s ease;
 }
 
-.tokenChips button:active {
-  transform: scale(0.95);
+.copyButton:active {
+  transform: scale(0.96);
+  background: var(--primary-soft);
 }
 
 /* ---------- 카테고리 칩 ---------- */

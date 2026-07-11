@@ -85,9 +85,19 @@ const backupKey = 'line-dance-backup-at'
 const smsTemplateKey = 'line-dance-sms-templates'
 
 const defaultSmsTemplates = {
-  unpaid: '{이름}님 안녕하세요~ 수강료 결제일이 지나서 안내드려요. 확인 부탁드립니다 :)',
-  lowCredit: '{이름}님 안녕하세요~ 수강권이 {잔여}회 남아서 재등록 안내드려요. 계속 함께해요 :)',
-  expiring: '{이름}님 안녕하세요~ 다음 결제일({결제일})이 다가와서 미리 안내드려요 :)',
+  unpaid: '회원님 안녕하세요~ 수강료 결제일이 지나서 안내드려요. 확인 부탁드립니다 :)',
+  lowCredit: '회원님 안녕하세요~ 수강권 횟수가 얼마 남지 않아 재등록 안내드려요. 계속 함께해요 :)',
+  expiring: '회원님 안녕하세요~ 다음 결제일이 다가와서 미리 안내드려요 :)',
+}
+
+function sanitizeTemplate(text: string) {
+  // 예전 버전의 자동치환 표시가 남아 있으면 자연스러운 문구로 정리한다
+  return text
+    .replaceAll('{이름}님', '회원님')
+    .replaceAll('{이름}', '회원')
+    .replaceAll('{잔여}회', '얼마')
+    .replaceAll('({결제일})', '')
+    .replaceAll('{결제일}', '')
 }
 
 type SmsTemplates = typeof defaultSmsTemplates
@@ -425,9 +435,14 @@ function App() {
   const [toast, setToast] = useState<string | null>(null)
   const [smsTemplates, setSmsTemplates] = useState<SmsTemplates>(() => {
     try {
-      return {
+      const saved = {
         ...defaultSmsTemplates,
         ...(JSON.parse(localStorage.getItem(smsTemplateKey) ?? '{}') as Partial<SmsTemplates>),
+      }
+      return {
+        unpaid: sanitizeTemplate(saved.unpaid),
+        lowCredit: sanitizeTemplate(saved.lowCredit),
+        expiring: sanitizeTemplate(saved.expiring),
       }
     } catch {
       return defaultSmsTemplates
@@ -455,16 +470,34 @@ function App() {
     notify('문자 템플릿이 저장되었습니다')
   }
 
-  function buildSms(kind: keyof SmsTemplates, member: Member) {
-    return smsTemplates[kind]
-      .replaceAll('{이름}', member.name)
-      .replaceAll('{잔여}', String(member.remainingCredits))
-      .replaceAll('{결제일}', member.nextPaymentDue || member.passUntil || '')
+  function copyText(text: string) {
+    navigator.clipboard
+      ?.writeText(text)
+      .then(() => notify('복사되었습니다'))
+      .catch(() => notify('복사에 실패했어요. 문구를 길게 눌러 복사해 주세요.'))
   }
 
   useEffect(() => {
     window.scrollTo(0, 0)
   }, [tab])
+
+  // 안드로이드 뒤로가기가 앱을 닫지 않고 이전 탭으로 이동하도록 한다
+  const skipHistoryPushRef = useRef(false)
+  useEffect(() => {
+    if (skipHistoryPushRef.current) {
+      skipHistoryPushRef.current = false
+      return
+    }
+    window.history.pushState({ tab }, '')
+  }, [tab])
+  useEffect(() => {
+    const onPopState = (event: PopStateEvent) => {
+      skipHistoryPushRef.current = true
+      setTab(((event.state as { tab?: Tab } | null)?.tab as Tab) ?? 'home')
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [])
 
   const activeMembers = members.filter((member) => member.status === 'active')
   const consultationMembers = members.filter((member) => member.status === 'prospect')
@@ -1006,7 +1039,7 @@ function App() {
         <HomeView
           backupAgeDays={backupAgeDays}
           backupOverdue={backupOverdue}
-          buildSms={buildSms}
+          onCopyText={copyText}
           expiringMembers={expiringOnly}
           hasSampleData={hasSampleData}
           lowCreditMembers={lowCreditMembers}
@@ -1145,7 +1178,7 @@ function App() {
 function HomeView({
   backupAgeDays,
   backupOverdue,
-  buildSms,
+  onCopyText,
   expiringMembers,
   hasSampleData,
   lowCreditMembers,
@@ -1162,7 +1195,7 @@ function HomeView({
 }: {
   backupAgeDays: number | null
   backupOverdue: boolean
-  buildSms: (kind: keyof SmsTemplates, member: Member) => string
+  onCopyText: (text: string) => void
   expiringMembers: Member[]
   hasSampleData: boolean
   lowCreditMembers: Member[]
@@ -1275,7 +1308,7 @@ function HomeView({
                 </div>
                 <a
                   className="smsButton"
-                  href={smsHref(member.phone, buildSms('unpaid', member))}
+                  href={smsHref(member.phone, smsTemplates.unpaid)}
                   aria-label={`${member.name} 문자`}
                 >
                   <MessageCircle size={17} />
@@ -1303,7 +1336,7 @@ function HomeView({
               </div>
               <a
                 className="smsButton"
-                href={smsHref(member.phone, buildSms('lowCredit', member))}
+                href={smsHref(member.phone, smsTemplates.lowCredit)}
                 aria-label={`${member.name} 문자`}
               >
                 <MessageCircle size={17} />
@@ -1322,7 +1355,7 @@ function HomeView({
               </div>
               <a
                 className="smsButton"
-                href={smsHref(member.phone, buildSms('expiring', member))}
+                href={smsHref(member.phone, smsTemplates.expiring)}
                 aria-label={`${member.name} 문자`}
               >
                 <MessageCircle size={17} />
@@ -1363,7 +1396,7 @@ function HomeView({
         action={onSaveSmsTemplates}
         submitLabel="템플릿 저장"
       >
-        <SmsTemplateEditor smsTemplates={smsTemplates} />
+        <SmsTemplateEditor onCopy={onCopyText} smsTemplates={smsTemplates} />
       </FormDrawer>
 
       <details className="formDrawer">
@@ -1665,7 +1698,6 @@ function TimeClassCard({
 }) {
   const [mode, setMode] = useState<'idle' | 'check' | 'assign'>('idle')
   const [draft, setDraft] = useState<Record<string, AttendanceStatus>>({})
-  const [picked, setPicked] = useState<Record<string, boolean>>({})
   const [searchTerm, setSearchTerm] = useState('')
   const assignedMembers = members.filter(
     (member) => member.status === 'active' && member.classIds.includes(danceClass.id),
@@ -1678,7 +1710,6 @@ function TimeClassCard({
   const checkedCount = assignedMembers.filter(
     (member) => attendance[attendanceKey(dateKey, danceClass.id, member.id)],
   ).length
-  const pickedCount = Object.values(picked).filter(Boolean).length
 
   function startChecking() {
     const initial: Record<string, AttendanceStatus> = {}
@@ -1692,14 +1723,6 @@ function TimeClassCard({
 
   function confirmChecking() {
     onSaveAttendance(dateKey, danceClass.id, draft)
-    setMode('idle')
-  }
-
-  function confirmAssigning() {
-    Object.entries(picked).forEach(([memberId, isPicked]) => {
-      if (isPicked) onAssignMember(memberId, danceClass.id)
-    })
-    setPicked({})
     setMode('idle')
   }
 
@@ -1727,7 +1750,6 @@ function TimeClassCard({
               type="button"
               className="assignStartButton"
               onClick={() => {
-                setPicked({})
                 setSearchTerm('')
                 setMode('assign')
               }}
@@ -1779,48 +1801,38 @@ function TimeClassCard({
 
       {mode === 'assign' && (
         <div className="draftRoster">
-          <p className="draftGuide">이 수업에 추가할 회원을 선택하세요 (상담·대기 회원도 검색됩니다)</p>
+          <p className="draftGuide">이름을 검색하고, 나온 회원을 누르면 바로 추가됩니다</p>
           <input
             type="search"
             className="pickSearch"
             placeholder="이름·전화번호 검색"
             value={searchTerm}
             onChange={(event) => setSearchTerm(event.target.value)}
+            autoFocus
           />
-          {searchedCandidates.map((member) => (
-            <button
-              type="button"
-              className={picked[member.id] ? 'pickRow on' : 'pickRow'}
-              onClick={() =>
-                setPicked((current) => ({ ...current, [member.id]: !current[member.id] }))
-              }
-              key={member.id}
-            >
-              <span>
-                {member.name}
-                {member.status !== 'active' && (
-                  <em className="pickStatus">{memberStatusLabel(member.status)}</em>
-                )}
-              </span>
-              <b>{picked[member.id] ? '선택됨' : '선택'}</b>
-            </button>
-          ))}
-          {!searchedCandidates.length && (
+          {searchTerm &&
+            searchedCandidates.map((member) => (
+              <button
+                type="button"
+                className="pickRow"
+                onClick={() => onAssignMember(member.id, danceClass.id)}
+                key={member.id}
+              >
+                <span>
+                  {member.name}
+                  {member.status !== 'active' && (
+                    <em className="pickStatus">{memberStatusLabel(member.status)}</em>
+                  )}
+                </span>
+                <b>+ 추가</b>
+              </button>
+            ))}
+          {searchTerm && !searchedCandidates.length && (
             <em className="draftEmpty">검색 결과가 없습니다</em>
           )}
-          <div className="draftFoot">
-            <button type="button" className="draftCancel" onClick={() => setMode('idle')}>
-              취소
-            </button>
-            <button
-              type="button"
-              className="draftConfirm"
-              disabled={!pickedCount}
-              onClick={confirmAssigning}
-            >
-              {pickedCount ? `${pickedCount}명 추가` : '회원을 선택하세요'}
-            </button>
-          </div>
+          <button type="button" className="draftCancel" onClick={() => setMode('idle')}>
+            닫기
+          </button>
         </div>
       )}
     </div>
@@ -1840,9 +1852,11 @@ function EmptySlot({
   const [picked, setPicked] = useState<Record<string, boolean>>({})
   const [searchTerm, setSearchTerm] = useState('')
   const pickedCount = Object.values(picked).filter(Boolean).length
-  const searched = members.filter((member) =>
-    `${member.name} ${member.phone}`.toLowerCase().includes(searchTerm.toLowerCase()),
-  )
+  const searched = searchTerm
+    ? members.filter((member) =>
+        `${member.name} ${member.phone}`.toLowerCase().includes(searchTerm.toLowerCase()),
+      )
+    : members.filter((member) => picked[member.id])
 
   if (!open) {
     return (
@@ -1863,7 +1877,7 @@ function EmptySlot({
   return (
     <div className="timeClassCard">
       <p className="draftGuide">
-        {hour}:00 수업에 넣을 회원을 선택하세요 (상담·대기 회원도 검색됩니다)
+        {hour}:00 수업에 넣을 회원을 검색해서 선택하세요
       </p>
       <div className="draftRoster slotRoster">
         <input
@@ -1872,6 +1886,7 @@ function EmptySlot({
           placeholder="이름·전화번호 검색"
           value={searchTerm}
           onChange={(event) => setSearchTerm(event.target.value)}
+          autoFocus
         />
         {searched.map((member) => (
           <button
@@ -1891,7 +1906,9 @@ function EmptySlot({
             <b>{picked[member.id] ? '선택됨' : '선택'}</b>
           </button>
         ))}
-        {!searched.length && <em className="draftEmpty">검색 결과가 없습니다</em>}
+        {searchTerm && !searched.length && (
+          <em className="draftEmpty">검색 결과가 없습니다</em>
+        )}
         <div className="draftFoot">
           <button type="button" className="draftCancel" onClick={() => setOpen(false)}>
             취소
@@ -1973,6 +1990,11 @@ function MembersView({
   ]
   const filtered = members
     .filter((member) => {
+      // 검색 중에는 분류와 상관없이 전체 회원에서 찾는다
+      if (query) {
+        const haystack = `${member.name} ${member.phone} ${member.note}`.toLowerCase()
+        return haystack.includes(query.toLowerCase())
+      }
       if (member.status !== memberFilter) return false
       if (quickFilter === 'unpaid' && paymentStatusOf(member) !== 'unpaid') return false
       if (quickFilter === 'soon' && paymentStatusOf(member) !== 'soon') return false
@@ -1981,8 +2003,7 @@ function MembersView({
         !(member.totalCredits > 0 && member.remainingCredits <= 2)
       )
         return false
-      const haystack = `${member.name} ${member.phone} ${member.note}`.toLowerCase()
-      return haystack.includes(query.toLowerCase())
+      return true
     })
     .sort((a, b) => a.name.localeCompare(b.name, 'ko'))
   const quickFilters: Array<{ label: string; value: typeof quickFilter }> = [
@@ -2640,14 +2661,26 @@ function AttendanceView({
                 <div className="taskAvatar">{member.name.slice(0, 1)}</div>
                 <div className="statBody">
                   <strong>{member.name}</strong>
-                  <span>
-                    {member.passType}
-                    {member.totalCredits > 0
-                      ? <> · 잔여 <b>{member.remainingCredits}/{member.totalCredits}회</b></>
-                      : passDays !== null
-                        ? <> · 만료까지 <b>{passDays < 0 ? `${Math.abs(passDays)}일 지남` : `${passDays}일`}</b></>
-                        : null}
-                  </span>
+                  <span>{member.passType}</span>
+                </div>
+                <div className="statBig">
+                  {member.totalCredits > 0 ? (
+                    <>
+                      <b className={member.remainingCredits <= 2 ? 'unpaid' : ''}>
+                        {member.remainingCredits}
+                      </b>
+                      <span>/{member.totalCredits}회 남음</span>
+                    </>
+                  ) : passDays !== null ? (
+                    <>
+                      <b className={passDays < 0 ? 'unpaid' : ''}>
+                        {passDays < 0 ? `${Math.abs(passDays)}일` : `${passDays}일`}
+                      </b>
+                      <span>{passDays < 0 ? '지남' : '남음'}</span>
+                    </>
+                  ) : (
+                    <span>-</span>
+                  )}
                 </div>
                 {member.totalCredits > 0 && (
                   <div
@@ -2775,6 +2808,8 @@ function PaymentsView({
               .filter((danceClass) => member.classIds.includes(danceClass.id))
               .map((danceClass) => danceClass.name)
             const payStatus = paymentStatusOf(member)
+            const totalPaid = member.payments.reduce((sum, payment) => sum + payment.amount, 0)
+            const dueDays = daysUntil(member.nextPaymentDue || member.passUntil)
             return (
               <article className="paymentCard" key={member.id}>
                 <div className="paymentHead">
@@ -2784,6 +2819,12 @@ function PaymentsView({
                   </div>
                   <b className={payStatus}>{paymentLabel(payStatus)}</b>
                 </div>
+                {payStatus === 'unpaid' && (
+                  <p className="dueNotice">
+                    받아야 할 회비 <b>{formatCurrency(member.paidAmount)}</b>
+                    {dueDays !== null && dueDays < 0 && ` · ${Math.abs(dueDays)}일 지남`}
+                  </p>
+                )}
                 <div className="paymentSummary">
                   {member.totalCredits > 0 ? (
                     <span>
@@ -2793,15 +2834,18 @@ function PaymentsView({
                     <span>
                       잔여기간{' '}
                       <b>
-                        {(() => {
-                          const days = daysUntil(member.nextPaymentDue || member.passUntil)
-                          if (days === null) return '-'
-                          return days < 0 ? `${Math.abs(days)}일 지남` : `${days}일 남음`
-                        })()}
+                        {dueDays === null
+                          ? '-'
+                          : dueDays < 0
+                            ? `${Math.abs(dueDays)}일 지남`
+                            : `${dueDays}일 남음`}
                       </b>
                     </span>
                   )}
-                  <span>결제 금액 <b>{formatCurrency(member.paidAmount)}</b></span>
+                  <span>회비(1회 결제) <b>{formatCurrency(member.paidAmount)}</b></span>
+                  <span>
+                    누적 결제 <b>{formatCurrency(totalPaid)}{member.payments.length > 0 && ` (${member.payments.length}건)`}</b>
+                  </span>
                   <span>최근 결제 <b>{member.lastPaidAt || '-'}</b></span>
                   <span>다음 결제 <b>{member.nextPaymentDue || '-'}</b></span>
                 </div>
@@ -2932,64 +2976,49 @@ function FormDrawer({
   )
 }
 
-function SmsTemplateEditor({ smsTemplates }: { smsTemplates: SmsTemplates }) {
+function SmsTemplateEditor({
+  onCopy,
+  smsTemplates,
+}: {
+  onCopy: (text: string) => void
+  smsTemplates: SmsTemplates
+}) {
   const unpaidRef = useRef<HTMLTextAreaElement | null>(null)
   const lowCreditRef = useRef<HTMLTextAreaElement | null>(null)
   const expiringRef = useRef<HTMLTextAreaElement | null>(null)
-  const [target, setTarget] = useState<keyof SmsTemplates>('unpaid')
-  const refs = { expiring: expiringRef, lowCredit: lowCreditRef, unpaid: unpaidRef }
-
-  function insertToken(token: string) {
-    const el = refs[target].current
-    if (!el) return
-    const start = el.selectionStart ?? el.value.length
-    const end = el.selectionEnd ?? el.value.length
-    el.value = `${el.value.slice(0, start)}${token}${el.value.slice(end)}`
-    const cursor = start + token.length
-    el.focus()
-    el.setSelectionRange(cursor, cursor)
-  }
+  const fields: Array<{
+    label: string
+    name: keyof SmsTemplates
+    ref: React.MutableRefObject<HTMLTextAreaElement | null>
+  }> = [
+    { label: '미납 안내', name: 'unpaid', ref: unpaidRef },
+    { label: '재등록 안내', name: 'lowCredit', ref: lowCreditRef },
+    { label: '결제일 임박 안내', name: 'expiring', ref: expiringRef },
+  ]
 
   return (
     <>
       <p className="hint ruleHint">
-        입력칸을 누른 뒤 아래 버튼을 누르면, 보낼 때 회원에 맞게 자동으로 바뀌는 표시가
-        문구에 들어갑니다.
+        자주 쓰는 안내 문구를 저장해 두고, 전체 복사해서 문자·카톡에 붙여넣으세요.
       </p>
-      <div className="tokenChips">
-        {['{이름}', '{잔여}', '{결제일}'].map((token) => (
-          <button type="button" onClick={() => insertToken(token)} key={token}>
-            + {token}
+      {fields.map((field) => (
+        <div className="field" key={field.name}>
+          <span>{field.label}</span>
+          <textarea
+            name={field.name}
+            defaultValue={smsTemplates[field.name]}
+            rows={3}
+            ref={field.ref}
+          />
+          <button
+            type="button"
+            className="copyButton"
+            onClick={() => onCopy(field.ref.current?.value ?? '')}
+          >
+            전체 복사
           </button>
-        ))}
-      </div>
-      <Field label="미납 안내">
-        <textarea
-          name="unpaid"
-          defaultValue={smsTemplates.unpaid}
-          rows={3}
-          ref={unpaidRef}
-          onFocus={() => setTarget('unpaid')}
-        />
-      </Field>
-      <Field label="재등록(잔여횟수) 안내">
-        <textarea
-          name="lowCredit"
-          defaultValue={smsTemplates.lowCredit}
-          rows={3}
-          ref={lowCreditRef}
-          onFocus={() => setTarget('lowCredit')}
-        />
-      </Field>
-      <Field label="결제일 임박 안내">
-        <textarea
-          name="expiring"
-          defaultValue={smsTemplates.expiring}
-          rows={3}
-          ref={expiringRef}
-          onFocus={() => setTarget('expiring')}
-        />
-      </Field>
+        </div>
+      ))}
     </>
   )
 }
