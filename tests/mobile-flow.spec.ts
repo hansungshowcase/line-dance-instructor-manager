@@ -66,9 +66,12 @@ test('instructor can manage classes, members, attendance, and payment details', 
   await paymentCard.getByRole('button', { name: '저장' }).click()
   await expect(paymentCard.locator('b.unpaid')).toHaveText('미납')
 
-  // 재결제 원클릭: 미납 → 완납, 결제일 갱신
+  // 재결제 원클릭: 미납 → 완납, 결제일 갱신, 수납 내역 기록
   await paymentCard.getByRole('button', { name: '재결제 받음 (완납 처리)' }).click()
   await expect(paymentCard.locator('b.paid')).toHaveText('완납')
+  await expect(
+    page.locator('.paymentLogRow').filter({ hasText: '최하은' }).first(),
+  ).toBeVisible()
 
   // 상담 → 등록 회원 전환
   await page.getByRole('button', { name: '상담' }).click()
@@ -83,4 +86,9 @@ test('instructor can manage classes, members, attendance, and payment details', 
   await page.getByRole('button', { name: '출석' }).click()
   await page.getByRole('button', { name: /전체 출석 처리/ }).click()
   await expect(page.getByText('미체크 0')).toBeVisible()
+
+  // 회원별 날짜별 출석 이력 조회
+  const historyRow = page.locator('.memberStatRow').filter({ hasText: '김미영' })
+  await historyRow.locator('details.historyDetails summary').click()
+  await expect(historyRow.locator('.historyDetails li').first()).toBeVisible()
 })

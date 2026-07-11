@@ -47,6 +47,11 @@ type PassTemplate = {
   classIds: string[]
 }
 
+type PaymentRecord = {
+  date: string
+  amount: number
+}
+
 type Member = {
   id: string
   name: string
@@ -58,6 +63,7 @@ type Member = {
   remainingCredits: number
   totalCredits: number
   paidAmount: number
+  payments: PaymentRecord[]
   lastPaidAt: string
   nextPaymentDue: string
   passUntil: string
@@ -151,6 +157,7 @@ const seedMembers: Member[] = [
     remainingCredits: 0,
     totalCredits: 0,
     paidAmount: 90000,
+    payments: [{ amount: 90000, date: addDays(-21) }],
     lastPaidAt: addDays(-21),
     nextPaymentDue: addDays(9),
     passUntil: addDays(9),
@@ -168,6 +175,7 @@ const seedMembers: Member[] = [
     remainingCredits: 3,
     totalCredits: 10,
     paidAmount: 120000,
+    payments: [{ amount: 120000, date: addDays(-18) }],
     lastPaidAt: addDays(-18),
     nextPaymentDue: addDays(21),
     passUntil: addDays(21),
@@ -185,6 +193,7 @@ const seedMembers: Member[] = [
     remainingCredits: 0,
     totalCredits: 0,
     paidAmount: 0,
+    payments: [],
     lastPaidAt: addDays(-34),
     nextPaymentDue: addDays(-2),
     passUntil: addDays(-2),
@@ -202,6 +211,7 @@ const seedMembers: Member[] = [
     remainingCredits: 0,
     totalCredits: 0,
     paidAmount: 0,
+    payments: [],
     lastPaidAt: '',
     nextPaymentDue: '',
     passUntil: addDays(14),
@@ -221,6 +231,7 @@ const seedMembers: Member[] = [
     remainingCredits: 0,
     totalCredits: 0,
     paidAmount: 0,
+    payments: [],
     lastPaidAt: '',
     nextPaymentDue: '',
     passUntil: addDays(30),
@@ -317,7 +328,12 @@ function useStoredData() {
     if (!raw) return
     try {
       const saved = JSON.parse(raw) as {
-        members?: Array<Omit<Member, 'totalCredits'> & { totalCredits?: number }>
+        members?: Array<
+          Omit<Member, 'totalCredits' | 'payments'> & {
+            totalCredits?: number
+            payments?: PaymentRecord[]
+          }
+        >
         classes?: DanceClass[]
         passTemplates?: PassTemplate[]
         attendance?: AttendanceBook
@@ -327,6 +343,11 @@ function useStoredData() {
           saved.members.map((member) => ({
             ...member,
             totalCredits: member.totalCredits ?? member.remainingCredits,
+            payments:
+              member.payments ??
+              (member.lastPaidAt && member.paidAmount > 0
+                ? [{ amount: member.paidAmount, date: member.lastPaidAt }]
+                : []),
           })),
         )
       if (saved.classes?.length) setClasses(saved.classes)
@@ -441,6 +462,14 @@ function App() {
       ])
     }
 
+    const initialCredits = Number(
+      formData.get('remainingCredits') || selectedPass?.sessionCount || 0,
+    )
+    const paidAmount = Number(
+      formData.get('paidAmount') || selectedPass?.tuitionFee || chosenClass?.tuitionFee || 0,
+    )
+    const lastPaidAt = String(formData.get('lastPaidAt') || todayKey)
+
     setMembers((current) => [
       {
         id: makeId('member'),
@@ -450,16 +479,11 @@ function App() {
         status: 'active',
         classIds: assignedClassIds,
         passType: selectedPass?.name ?? String(formData.get('passType') ?? '월회비'),
-        remainingCredits: Number(
-          formData.get('remainingCredits') || selectedPass?.sessionCount || 0,
-        ),
-        totalCredits: Number(
-          formData.get('remainingCredits') || selectedPass?.sessionCount || 0,
-        ),
-        paidAmount: Number(
-          formData.get('paidAmount') || selectedPass?.tuitionFee || chosenClass?.tuitionFee || 0,
-        ),
-        lastPaidAt: String(formData.get('lastPaidAt') ?? todayKey),
+        remainingCredits: initialCredits,
+        totalCredits: initialCredits,
+        paidAmount,
+        payments: paidAmount > 0 ? [{ amount: paidAmount, date: lastPaidAt }] : [],
+        lastPaidAt,
         nextPaymentDue: String(formData.get('nextPaymentDue') ?? addDays(30)),
         passUntil: String(formData.get('passUntil') ?? addDays(30)),
         paymentStatus: 'paid',
@@ -564,6 +588,7 @@ function App() {
         remainingCredits: 0,
         totalCredits: 0,
         paidAmount: 0,
+        payments: [],
         lastPaidAt: '',
         nextPaymentDue: '',
         passUntil: addDays(14),
@@ -670,6 +695,10 @@ function App() {
               passUntil: addDays(30),
               remainingCredits:
                 member.totalCredits > 0 ? member.totalCredits : member.remainingCredits,
+              payments: [
+                ...member.payments.filter((payment) => payment.date !== todayKey),
+                { amount: member.paidAmount, date: todayKey },
+              ],
             }
           : member,
       ),
@@ -733,7 +762,12 @@ function App() {
     reader.onload = () => {
       try {
         const saved = JSON.parse(String(reader.result)) as {
-          members?: Array<Omit<Member, 'totalCredits'> & { totalCredits?: number }>
+          members?: Array<
+            Omit<Member, 'totalCredits' | 'payments'> & {
+              totalCredits?: number
+              payments?: PaymentRecord[]
+            }
+          >
           classes?: DanceClass[]
           passTemplates?: PassTemplate[]
           attendance?: AttendanceBook
@@ -748,6 +782,11 @@ function App() {
             saved.members.map((member) => ({
               ...member,
               totalCredits: member.totalCredits ?? member.remainingCredits,
+              payments:
+                member.payments ??
+                (member.lastPaidAt && member.paidAmount > 0
+                  ? [{ amount: member.paidAmount, date: member.lastPaidAt }]
+                  : []),
             })),
           )
         if (saved.classes?.length) setClasses(saved.classes)
@@ -763,27 +802,32 @@ function App() {
 
   function updatePayment(memberId: string, formData: FormData) {
     setMembers((current) =>
-      current.map((member) =>
-        member.id === memberId
-          ? {
-              ...member,
-              paymentStatus: String(
-                formData.get('paymentStatus') ?? member.paymentStatus,
-              ) as PaymentStatus,
-              passType: String(formData.get('passType') ?? member.passType),
-              remainingCredits: Number(
-                formData.get('remainingCredits') ?? member.remainingCredits,
-              ),
-              totalCredits: Number(formData.get('totalCredits') ?? member.totalCredits),
-              paidAmount: Number(formData.get('paidAmount') ?? member.paidAmount),
-              lastPaidAt: String(formData.get('lastPaidAt') ?? member.lastPaidAt),
-              nextPaymentDue: String(
-                formData.get('nextPaymentDue') ?? member.nextPaymentDue,
-              ),
-              passUntil: String(formData.get('passUntil') ?? member.passUntil),
-            }
-          : member,
-      ),
+      current.map((member) => {
+        if (member.id !== memberId) return member
+        const paidAmount = Number(formData.get('paidAmount') ?? member.paidAmount)
+        const lastPaidAt = String(formData.get('lastPaidAt') ?? member.lastPaidAt)
+        // 새 결제일이 기록에 없으면 수납 내역에 추가한다
+        const payments =
+          paidAmount > 0 && lastPaidAt && !member.payments.some((p) => p.date === lastPaidAt)
+            ? [...member.payments, { amount: paidAmount, date: lastPaidAt }]
+            : member.payments
+        return {
+          ...member,
+          paymentStatus: String(
+            formData.get('paymentStatus') ?? member.paymentStatus,
+          ) as PaymentStatus,
+          passType: String(formData.get('passType') ?? member.passType),
+          remainingCredits: Number(
+            formData.get('remainingCredits') ?? member.remainingCredits,
+          ),
+          totalCredits: Number(formData.get('totalCredits') ?? member.totalCredits),
+          paidAmount,
+          payments,
+          lastPaidAt,
+          nextPaymentDue: String(formData.get('nextPaymentDue') ?? member.nextPaymentDue),
+          passUntil: String(formData.get('passUntil') ?? member.passUntil),
+        }
+      }),
     )
   }
 
@@ -1972,9 +2016,11 @@ function AttendanceView({
       let makeup = 0
       let monthPresent = 0
       let lastPresent = ''
+      const records: Array<{ classId: string; date: string; status: AttendanceStatus }> = []
       for (const [key, status] of Object.entries(attendance)) {
-        const [date, , memberId] = key.split('|')
+        const [date, classId, memberId] = key.split('|')
         if (memberId !== member.id) continue
+        records.push({ classId, date, status })
         if (status === 'present') {
           present += 1
           if (date.startsWith(monthKey)) monthPresent += 1
@@ -1985,7 +2031,8 @@ function AttendanceView({
           makeup += 1
         }
       }
-      return { absent, lastPresent, makeup, member, monthPresent, present }
+      records.sort((a, b) => b.date.localeCompare(a.date))
+      return { absent, lastPresent, makeup, member, monthPresent, present, records }
     })
     .sort(
       (a, b) =>
@@ -2098,7 +2145,7 @@ function AttendanceView({
           출석 기록은 이 기기(브라우저)에 자동 저장되어 앱을 껐다 켜도 유지됩니다.
         </p>
         <div className="listStack">
-          {memberStats.map(({ absent, lastPresent, makeup, member, monthPresent, present }) => {
+          {memberStats.map(({ absent, lastPresent, makeup, member, monthPresent, present, records }) => {
             const usedCredits = Math.max(0, member.totalCredits - member.remainingCredits)
             const passDays = daysUntil(member.passUntil)
             return (
@@ -2138,6 +2185,26 @@ function AttendanceView({
                   <b>이번 달 {monthPresent}회</b>
                   <b>{lastPresent ? `최근 출석 ${lastPresent.slice(5).replace('-', '/')}` : '출석 기록 없음'}</b>
                 </div>
+                {records.length > 0 && (
+                  <details className="historyDetails">
+                    <summary>날짜별 이력 보기 ({records.length}건)</summary>
+                    <ul>
+                      {records.slice(0, 12).map((record) => (
+                        <li key={`${record.date}-${record.classId}`}>
+                          <span>{record.date}</span>
+                          <em>
+                            {classes.find((danceClass) => danceClass.id === record.classId)
+                              ?.name ?? '삭제된 수업'}
+                          </em>
+                          <b className={`state-${record.status}`}>
+                            {attendanceLabel(record.status)}
+                          </b>
+                        </li>
+                      ))}
+                      {records.length > 12 && <li className="moreRecords">외 {records.length - 12}건</li>}
+                    </ul>
+                  </details>
+                )}
               </article>
             )
           })}
@@ -2166,9 +2233,14 @@ function PaymentsView({
     unpaid: members.filter((member) => member.paymentStatus === 'unpaid').length,
   }
   const monthKey = todayKey.slice(0, 7)
-  const monthTotal = members
-    .filter((member) => member.lastPaidAt.startsWith(monthKey))
-    .reduce((sum, member) => sum + member.paidAmount, 0)
+  const allPayments = members
+    .flatMap((member) =>
+      member.payments.map((payment) => ({ ...payment, memberName: member.name })),
+    )
+    .sort((a, b) => b.date.localeCompare(a.date))
+  const monthTotal = allPayments
+    .filter((payment) => payment.date.startsWith(monthKey))
+    .reduce((sum, payment) => sum + payment.amount, 0)
   const visibleMembers =
     statusFilter === 'all'
       ? members
@@ -2296,6 +2368,23 @@ function PaymentsView({
             )
           })}
           {!visibleMembers.length && <p className="emptyText">해당 상태의 회원이 없습니다.</p>}
+        </div>
+      </section>
+
+      <section className="panel">
+        <h2>최근 수납 내역</h2>
+        <p className="hint storageHint">
+          재결제 처리하거나 결제 정보의 최근 결제일을 바꾸면 자동으로 기록됩니다.
+        </p>
+        <div className="listStack">
+          {allPayments.slice(0, 10).map((payment) => (
+            <div className="paymentLogRow" key={`${payment.date}-${payment.memberName}-${payment.amount}`}>
+              <span className="paymentLogDate">{payment.date.slice(5).replace('-', '/')}</span>
+              <strong>{payment.memberName}</strong>
+              <b>{formatCurrency(payment.amount)}</b>
+            </div>
+          ))}
+          {!allPayments.length && <p className="emptyText">아직 수납 기록이 없습니다.</p>}
         </div>
       </section>
     </section>

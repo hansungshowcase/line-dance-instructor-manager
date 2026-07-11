@@ -1580,6 +1580,118 @@ button {
   background: var(--warn-soft);
 }
 
+.historyDetails {
+  grid-column: 1 / -1;
+  border-top: 1px solid var(--line);
+  padding-top: 4px;
+}
+
+.historyDetails summary {
+  padding: 8px 0 4px;
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.historyDetails summary::-webkit-details-marker {
+  display: none;
+}
+
+.historyDetails ul {
+  margin: 6px 0 2px;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.historyDetails li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: var(--radius-sm);
+  background: var(--soft);
+  padding: 9px 11px;
+  font-size: 13px;
+}
+
+.historyDetails li span {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.historyDetails li em {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.historyDetails li b {
+  flex: 0 0 auto;
+  font-weight: 700;
+}
+
+.historyDetails .state-present {
+  color: var(--ok);
+}
+
+.historyDetails .state-absent {
+  color: var(--danger);
+}
+
+.historyDetails .state-makeup {
+  color: var(--warn);
+}
+
+.historyDetails .moreRecords {
+  justify-content: center;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.paymentLogRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: white;
+  padding: 12px 13px;
+}
+
+.paymentLogDate {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.paymentLogRow strong {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.paymentLogRow b {
+  flex: 0 0 auto;
+  font-size: 14px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
 .attendanceRow {
   display: flex;
   justify-content: space-between;
