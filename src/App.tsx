@@ -927,10 +927,15 @@ function App() {
     notify('백업 파일을 내보냈습니다')
   }
 
-  function openAttendance(classId: string) {
-    setSelectedClassId(classId)
-    setAttendanceDate(todayKey)
-    setTab('attendance')
+  function openScheduleClass(classId: string) {
+    setTab('schedule')
+    // 시간표 탭이 그려진 뒤 해당 수업 카드로 스크롤한다
+    setTimeout(() => {
+      const target =
+        document.getElementById(`class-card-${classId}`) ??
+        document.getElementById('timeline-view')
+      target?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 150)
   }
 
   function clearSampleData() {
@@ -1047,7 +1052,7 @@ function App() {
           onClearSamples={clearSampleData}
           onExport={exportData}
           onImport={importData}
-          onOpenAttendance={openAttendance}
+          onOpenSchedule={openScheduleClass}
           onSaveSmsTemplates={saveSmsTemplates}
           setTab={setTab}
           smsTemplates={smsTemplates}
@@ -1186,7 +1191,7 @@ function HomeView({
   onClearSamples,
   onExport,
   onImport,
-  onOpenAttendance,
+  onOpenSchedule,
   onSaveSmsTemplates,
   setTab,
   smsTemplates,
@@ -1203,7 +1208,7 @@ function HomeView({
   onClearSamples: () => void
   onExport: () => void
   onImport: (file: File) => void
-  onOpenAttendance: (classId: string) => void
+  onOpenSchedule: (classId: string) => void
   onSaveSmsTemplates: (formData: FormData) => void
   setTab: (tab: Tab) => void
   smsTemplates: SmsTemplates
@@ -1267,7 +1272,7 @@ function HomeView({
               <button
                 type="button"
                 className={isLive ? 'rowItem live' : 'rowItem'}
-                onClick={() => onOpenAttendance(danceClass.id)}
+                onClick={() => onOpenSchedule(danceClass.id)}
                 key={danceClass.id}
               >
                 <div className="rowTime">
@@ -1280,7 +1285,7 @@ function HomeView({
                     {isLive && <em className="liveDot">진행 중</em>}
                   </strong>
                   <small>
-                    <MapPin size={12} /> {danceClass.location} · 탭하면 출석부
+                    <MapPin size={12} /> {danceClass.location} · 탭하면 시간표
                   </small>
                 </div>
                 <b className="rowCount">
@@ -1727,7 +1732,7 @@ function TimeClassCard({
   }
 
   return (
-    <div className="timeClassCard">
+    <div className="timeClassCard" id={`class-card-${danceClass.id}`}>
       <div className="timeClassTop">
         <div>
           <b>{weekdays[danceClass.weekday]}</b>
@@ -1818,11 +1823,14 @@ function TimeClassCard({
                 onClick={() => onAssignMember(member.id, danceClass.id)}
                 key={member.id}
               >
-                <span>
-                  {member.name}
-                  {member.status !== 'active' && (
-                    <em className="pickStatus">{memberStatusLabel(member.status)}</em>
-                  )}
+                <span className="pickInfo">
+                  <strong>
+                    {member.name}
+                    {member.status !== 'active' && (
+                      <em className="pickStatus">{memberStatusLabel(member.status)}</em>
+                    )}
+                  </strong>
+                  <small>{member.phone} · {member.passType}</small>
                 </span>
                 <b>+ 추가</b>
               </button>
@@ -1897,11 +1905,14 @@ function EmptySlot({
             }
             key={member.id}
           >
-            <span>
-              {member.name}
-              {member.status !== 'active' && (
-                <em className="pickStatus">{memberStatusLabel(member.status)}</em>
-              )}
+            <span className="pickInfo">
+              <strong>
+                {member.name}
+                {member.status !== 'active' && (
+                  <em className="pickStatus">{memberStatusLabel(member.status)}</em>
+                )}
+              </strong>
+              <small>{member.phone} · {member.passType}</small>
             </span>
             <b>{picked[member.id] ? '선택됨' : '선택'}</b>
           </button>
@@ -2269,13 +2280,13 @@ function MembersView({
                   {isOpen && (member.status === 'active' ? (
                     <dl className="memberFacts">
                       <div>
-                        <dt>잔여기간</dt>
+                        <dt>다음 결제까지</dt>
                         <dd className={dueDays !== null && dueDays < 0 ? 'unpaid' : ''}>
                           {dueDays === null
                             ? '-'
                             : dueDays < 0
                               ? `${Math.abs(dueDays)}일 지남`
-                              : `${dueDays}일 남음`}
+                              : `${dueDays}일`}
                         </dd>
                       </div>
                       {member.totalCredits > 0 && (
@@ -2832,13 +2843,13 @@ function PaymentsView({
                     </span>
                   ) : (
                     <span>
-                      잔여기간{' '}
+                      다음 결제까지{' '}
                       <b>
                         {dueDays === null
                           ? '-'
                           : dueDays < 0
                             ? `${Math.abs(dueDays)}일 지남`
-                            : `${dueDays}일 남음`}
+                            : `${dueDays}일`}
                       </b>
                     </span>
                   )}

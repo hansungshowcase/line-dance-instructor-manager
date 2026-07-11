@@ -97,10 +97,10 @@ test('instructor can manage classes, members, attendance, and payment details', 
   await historyRow.locator('details.historyDetails summary').click()
   await expect(historyRow.locator('.historyDetails li').first()).toBeVisible()
 
-  // 홈의 오늘 수업을 탭하면 해당 수업 출석부로 바로 이동
+  // 홈의 오늘 수업을 탭하면 시간표의 해당 수업으로 이동
   await page.getByRole('button', { name: '홈', exact: true }).click()
   await page.locator('button.rowItem').first().click()
-  await expect(page.getByRole('heading', { name: '출석 체크' })).toBeVisible()
+  await expect(page.getByText('10시 이후 시간대별 보기')).toBeVisible()
 
   // 시간표 출석 체크: 출석/결석 선택 후 확인을 눌러야 확정
   await page.getByRole('button', { name: '시간표', exact: true }).click()

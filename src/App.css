@@ -2536,6 +2536,25 @@ button {
   color: var(--ink);
 }
 
+.pickInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  text-align: left;
+}
+
+.pickInfo strong {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.pickInfo small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
 .pickRow > b {
   font-size: 12px;
   font-weight: 700;
