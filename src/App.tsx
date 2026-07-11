@@ -22,7 +22,7 @@ type Tab = 'home' | 'schedule' | 'members' | 'consultations' | 'attendance' | 'p
 type MemberStatus = 'active' | 'prospect' | 'waitlist'
 type PaymentStatus = 'paid' | 'unpaid' | 'soon'
 type AttendanceStatus = 'present' | 'absent' | 'makeup'
-type LessonType = 'line_group' | 'latin_group' | 'private'
+type LessonType = 'line_group' | 'latin_group' | 'private' | 'external'
 
 type DanceClass = {
   id: string
@@ -277,6 +277,11 @@ function addDays(days: number) {
   return toDateKey(date)
 }
 
+function addMonthsFrom(dateKey: string, months: number) {
+  const [year, month, day] = (dateKey || todayKey).split('-').map(Number)
+  return toDateKey(new Date(year, month - 1 + months, day))
+}
+
 function makeId(prefix: string) {
   return `${prefix}-${crypto.randomUUID().slice(0, 8)}`
 }
@@ -303,10 +308,14 @@ function daysUntil(dateKey: string) {
 }
 
 // 결제 상태는 잔여횟수·다음 결제일 기준으로 자동 판정한다 (수동 변경 불필요)
+// 개인레슨(유효기간 없음)은 순수하게 횟수만으로 판정한다
 function paymentStatusOf(member: Member): PaymentStatus {
   if (member.totalCredits > 0 && member.remainingCredits <= 0) return 'unpaid'
   const dueDate = member.nextPaymentDue || member.passUntil
-  if (!dueDate) return member.paymentStatus
+  if (!dueDate) {
+    if (member.totalCredits > 0) return member.remainingCredits <= 2 ? 'soon' : 'paid'
+    return member.paymentStatus
+  }
   const daysLeft = daysUntil(dueDate) ?? 0
   if (daysLeft < 0) return 'unpaid'
   if (daysLeft <= 7) return 'soon'
@@ -353,6 +362,16 @@ function hourFromTime(time: string) {
 function minutesFromTime(time: string) {
   const [hour, minute] = time.split(':').map(Number)
   return (hour || 0) * 60 + (minute || 0)
+}
+
+function timeFromMinutes(totalMinutes: number) {
+  const bounded = Math.max(0, Math.min(23 * 60 + 59, totalMinutes))
+  return `${String(Math.floor(bounded / 60)).padStart(2, '0')}:${String(bounded % 60).padStart(2, '0')}`
+}
+
+// 개인레슨은 시간표에서 직접 관리하고, 수업 관리 목록에는 그룹 수업만 둔다
+function isPrivateClass(danceClass: DanceClass) {
+  return danceClass.location === '개인레슨' || danceClass.name.includes('개인레슨')
 }
 
 function useStoredData() {
@@ -555,7 +574,13 @@ function App() {
     )
     const paidAmount = Number(formData.get('paidAmount') || selectedPass?.tuitionFee || 0)
     const lastPaidAt = String(formData.get('lastPaidAt') || todayKey)
-    const nextPaymentDue = String(formData.get('nextPaymentDue') || addDays(30))
+    // 그룹 수강권은 등록일부터 3개월 유효, 개인레슨은 유효기간 없이 횟수로만 차감
+    const nextPaymentDue =
+      selectedPass?.type === 'private'
+        ? ''
+        : selectedPass
+          ? addMonthsFrom(lastPaidAt, 3)
+          : String(formData.get('nextPaymentDue') || addMonthsFrom(lastPaidAt, 1))
 
     setMembers((current) => [
       {
@@ -607,7 +632,7 @@ function App() {
       weekday,
       startTime,
       endTime,
-      location: type === 'private' ? '개인레슨' : '스튜디오',
+      location: type === 'private' ? '개인레슨' : type === 'external' ? '외부' : '스튜디오',
       capacity,
       tuitionFee,
       level,
@@ -784,23 +809,29 @@ function App() {
 
   function quickRenew(memberId: string) {
     setMembers((current) =>
-      current.map((member) =>
-        member.id === memberId
-          ? {
-              ...member,
-              paymentStatus: 'paid' as PaymentStatus,
-              lastPaidAt: todayKey,
-              nextPaymentDue: addDays(30),
-              passUntil: addDays(30),
-              remainingCredits:
-                member.totalCredits > 0 ? member.totalCredits : member.remainingCredits,
-              payments: [
-                ...member.payments.filter((payment) => payment.date !== todayKey),
-                { amount: member.paidAmount, date: todayKey },
-              ],
-            }
-          : member,
-      ),
+      current.map((member) => {
+        if (member.id !== memberId) return member
+        // 월회비 +1개월, 그룹 회수권 +3개월, 개인레슨(기간 없음)은 횟수만 충전
+        const nextDue =
+          member.totalCredits > 0
+            ? member.nextPaymentDue
+              ? addMonthsFrom(todayKey, 3)
+              : ''
+            : addMonthsFrom(todayKey, 1)
+        return {
+          ...member,
+          paymentStatus: 'paid' as PaymentStatus,
+          lastPaidAt: todayKey,
+          nextPaymentDue: nextDue,
+          passUntil: nextDue,
+          remainingCredits:
+            member.totalCredits > 0 ? member.totalCredits : member.remainingCredits,
+          payments: [
+            ...member.payments.filter((payment) => payment.date !== todayKey),
+            { amount: member.paidAmount, date: todayKey },
+          ],
+        }
+      }),
     )
     notify('재결제 처리되었습니다')
   }
@@ -842,7 +873,7 @@ function App() {
         weekday,
         startTime: `${hourLabel}:00`,
         endTime: `${hourLabel}:50`,
-        location: '스튜디오',
+        location: '개인레슨',
         capacity: Math.max(1, memberIds.length),
         tuitionFee: 0,
         level: '전체',
@@ -861,6 +892,23 @@ function App() {
       ),
     )
     notify(`${hourLabel}:00 수업이 만들어졌습니다`)
+  }
+
+  function updateClassTime(classId: string, startTime: string) {
+    setClasses((current) =>
+      current.map((danceClass) => {
+        if (danceClass.id !== classId) return danceClass
+        const duration =
+          minutesFromTime(danceClass.endTime) - minutesFromTime(danceClass.startTime) || 50
+        const startMinutes = minutesFromTime(startTime)
+        return {
+          ...danceClass,
+          startTime: timeFromMinutes(startMinutes),
+          endTime: timeFromMinutes(startMinutes + duration),
+        }
+      }),
+    )
+    notify('수업 시간이 변경되었습니다')
   }
 
   function assignMemberToClass(memberId: string, classId: string) {
@@ -925,6 +973,60 @@ function App() {
     localStorage.setItem(backupKey, todayKey)
     setLastBackupAt(todayKey)
     notify('백업 파일을 내보냈습니다')
+  }
+
+  function exportCsv() {
+    const header = [
+      '이름',
+      '전화번호',
+      '구분',
+      '수강권',
+      '잔여횟수',
+      '총횟수',
+      '누적결제액',
+      '최근결제일',
+      '다음결제일',
+      '출석',
+      '결석',
+      '메모',
+    ]
+    const rows = members.map((member) => {
+      let present = 0
+      let absent = 0
+      for (const [key, status] of Object.entries(attendance)) {
+        if (!key.endsWith(`|${member.id}`)) continue
+        if (status === 'absent') absent += 1
+        else present += 1
+      }
+      const totalPaid = member.payments.reduce((sum, payment) => sum + payment.amount, 0)
+      return [
+        member.name,
+        member.phone,
+        memberStatusLabel(member.status),
+        member.passType,
+        member.remainingCredits,
+        member.totalCredits,
+        totalPaid,
+        member.lastPaidAt,
+        member.nextPaymentDue,
+        present,
+        absent,
+        member.note.replaceAll('\n', ' '),
+      ]
+    })
+    const csv =
+      '﻿' +
+      [header, ...rows]
+        .map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(','))
+        .join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `라인댄스-회원명단-${todayKey}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+    notify('엑셀 파일로 내보냈습니다')
   }
 
   function openScheduleClass(classId: string) {
@@ -1051,6 +1153,7 @@ function App() {
           members={members}
           onClearSamples={clearSampleData}
           onExport={exportData}
+          onExportCsv={exportCsv}
           onImport={importData}
           onOpenSchedule={openScheduleClass}
           onSaveSmsTemplates={saveSmsTemplates}
@@ -1070,6 +1173,7 @@ function App() {
           onRemoveClass={removeClass}
           onSaveAttendance={saveClassAttendance}
           onUpdateClass={updateClass}
+          onUpdateClassTime={updateClassTime}
         />
       )}
       {tab === 'members' && (
@@ -1190,6 +1294,7 @@ function HomeView({
   members,
   onClearSamples,
   onExport,
+  onExportCsv,
   onImport,
   onOpenSchedule,
   onSaveSmsTemplates,
@@ -1207,6 +1312,7 @@ function HomeView({
   members: Member[]
   onClearSamples: () => void
   onExport: () => void
+  onExportCsv: () => void
   onImport: (file: File) => void
   onOpenSchedule: (classId: string) => void
   onSaveSmsTemplates: (formData: FormData) => void
@@ -1247,18 +1353,6 @@ function HomeView({
           <ChevronRight size={15} />
         </button>
       </section>
-
-      {hasSampleData && (
-        <section className="sampleBanner">
-          <p>
-            <b>지금 보이는 회원·수업은 연습용 샘플이에요.</b> 사용법을 익힌 뒤 지우고
-            시작하세요.
-          </p>
-          <button type="button" onClick={onClearSamples}>
-            샘플 모두 지우기
-          </button>
-        </section>
-      )}
 
       <section className="panel">
         <h2>오늘 해야 할 수업</h2>
@@ -1420,15 +1514,15 @@ function HomeView({
         </summary>
         <div className="drawerBody">
           <p className="hint ruleHint">
-            모든 데이터는 이 기기에만 저장됩니다. 폰을 바꾸거나 브라우저 데이터를 지우면
-            사라지니 주기적으로 파일로 내보내 두세요.
+            모든 데이터는 이 기기에만 저장됩니다. 복원용 백업은 이 앱에 다시 불러올 수 있고,
+            엑셀 파일은 회원 명단을 공유하거나 컴퓨터에서 볼 때 사용해요.
           </p>
           <div className="split backupActions">
             <button type="button" className="secondaryButton" onClick={onExport}>
-              파일로 내보내기
+              복원용 백업 저장
             </button>
             <label className="secondaryButton importButton">
-              백업 가져오기
+              백업 불러오기
               <input
                 type="file"
                 accept="application/json,.json"
@@ -1439,6 +1533,14 @@ function HomeView({
                 }}
               />
             </label>
+            <button type="button" className="secondaryButton" onClick={onExportCsv}>
+              엑셀로 내보내기
+            </button>
+            {hasSampleData && (
+              <button type="button" className="dangerButton" onClick={onClearSamples}>
+                샘플 데이터 지우기
+              </button>
+            )}
           </div>
         </div>
       </details>
@@ -1455,6 +1557,7 @@ function ScheduleView({
   onRemoveClass,
   onSaveAttendance,
   onUpdateClass,
+  onUpdateClassTime,
 }: {
   attendance: AttendanceBook
   classes: DanceClass[]
@@ -1468,10 +1571,14 @@ function ScheduleView({
     marks: Record<string, AttendanceStatus>,
   ) => void
   onUpdateClass: (classId: string, formData: FormData) => void
+  onUpdateClassTime: (classId: string, startTime: string) => void
 }) {
   const weekDates = getWeekDates(today)
-  const monthDates = getMonthDates(today)
   const [selectedDate, setSelectedDate] = useState(today)
+  const [viewMonth, setViewMonth] = useState(
+    () => new Date(today.getFullYear(), today.getMonth(), 1),
+  )
+  const monthDates = getMonthDates(viewMonth)
   const classHours = classes.map((danceClass) => hourFromTime(danceClass.startTime))
   const firstHour = classHours.length ? Math.min(startHour, ...classHours) : startHour
   const lastHour = classHours.length ? Math.max(endHour, ...classHours) : endHour
@@ -1514,7 +1621,33 @@ function ScheduleView({
 
         <div className="monthCalendar">
           <div className="monthCalendarHead">
-            <strong>{today.getFullYear()}.{String(today.getMonth() + 1).padStart(2, '0')}</strong>
+            <div className="monthNav">
+              <button
+                type="button"
+                aria-label="이전 달"
+                onClick={() =>
+                  setViewMonth(
+                    (current) => new Date(current.getFullYear(), current.getMonth() - 1, 1),
+                  )
+                }
+              >
+                ‹
+              </button>
+              <strong>
+                {viewMonth.getFullYear()}.{String(viewMonth.getMonth() + 1).padStart(2, '0')}
+              </strong>
+              <button
+                type="button"
+                aria-label="다음 달"
+                onClick={() =>
+                  setViewMonth(
+                    (current) => new Date(current.getFullYear(), current.getMonth() + 1, 1),
+                  )
+                }
+              >
+                ›
+              </button>
+            </div>
             <span>{formatMonthDay(selectedDate)} {weekdays[selectedWeekday]}요일 선택됨</span>
           </div>
           <div className="monthWeekdays">
@@ -1531,7 +1664,7 @@ function ScheduleView({
               return (
                 <button
                   type="button"
-                  className={`${date.getMonth() !== today.getMonth() ? 'outside' : ''} ${
+                  className={`${date.getMonth() !== viewMonth.getMonth() ? 'outside' : ''} ${
                     dateKey === todayKey ? 'today' : ''
                   } ${dateKey === selectedDateKey ? 'selected' : ''}`}
                   onClick={() => {
@@ -1581,7 +1714,9 @@ function ScheduleView({
                       dateKey={selectedDateKey}
                       members={members}
                       onAssignMember={onAssignMember}
+                      onRemoveClass={onRemoveClass}
                       onSaveAttendance={onSaveAttendance}
+                      onUpdateClassTime={onUpdateClassTime}
                       key={danceClass.id}
                     />
                   ))}
@@ -1602,13 +1737,13 @@ function ScheduleView({
       </section>
 
       <section className="panel">
-        <h2>수업 관리</h2>
+        <h2>그룹 수업 관리</h2>
         <p className="hint storageHint">
-          시간표에 있는 수업의 이름·시간·장소를 바꾸거나 폐강할 때 사용해요. (수강권은 판매
-          상품, 여기는 실제 수업)
+          단체반의 이름·시간·장소 변경과 폐강은 여기서, 개인레슨은 시간표에서 바로
+          변경·삭제해요.
         </p>
         <div className="listStack">
-          {classes.map((danceClass) => (
+          {classes.filter((danceClass) => !isPrivateClass(danceClass)).map((danceClass) => (
             <details className="classEditor" key={danceClass.id}>
               <summary>
                 <span>
@@ -1660,22 +1795,24 @@ function ScheduleView({
                     <input name="tuitionFee" type="number" min="0" defaultValue={danceClass.tuitionFee} />
                   </Field>
                 </div>
-                <button type="submit" className="secondaryButton">수정 저장</button>
-                <button
-                  type="button"
-                  className="dangerButton"
-                  onClick={() => {
-                    if (
-                      window.confirm(
-                        `'${danceClass.name}' 수업을 삭제할까요? 배정된 회원은 수업 미지정 상태가 됩니다.`,
-                      )
-                    ) {
-                      onRemoveClass(danceClass.id)
-                    }
-                  }}
-                >
-                  수업 삭제
-                </button>
+                <div className="formActions">
+                  <button type="submit" className="secondaryButton">수정 저장</button>
+                  <button
+                    type="button"
+                    className="dangerButton"
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          `'${danceClass.name}' 수업을 삭제할까요? 배정된 회원은 수업 미지정 상태가 됩니다.`,
+                        )
+                      ) {
+                        onRemoveClass(danceClass.id)
+                      }
+                    }}
+                  >
+                    삭제
+                  </button>
+                </div>
               </form>
             </details>
           ))}
@@ -1691,22 +1828,27 @@ function TimeClassCard({
   dateKey,
   members,
   onAssignMember,
+  onRemoveClass,
   onSaveAttendance,
+  onUpdateClassTime,
 }: {
   attendance: AttendanceBook
   danceClass: DanceClass
   dateKey: string
   members: Member[]
   onAssignMember: (memberId: string, classId: string) => void
+  onRemoveClass: (classId: string) => void
   onSaveAttendance: (
     date: string,
     classId: string,
     marks: Record<string, AttendanceStatus>,
   ) => void
+  onUpdateClassTime: (classId: string, startTime: string) => void
 }) {
   const [mode, setMode] = useState<'idle' | 'check' | 'assign'>('idle')
   const [draft, setDraft] = useState<Record<string, AttendanceStatus>>({})
   const [searchTerm, setSearchTerm] = useState('')
+  const [timeValue, setTimeValue] = useState(danceClass.startTime)
   const assignedMembers = members.filter(
     (member) => member.status === 'active' && member.classIds.includes(danceClass.id),
   )
@@ -1743,9 +1885,39 @@ function TimeClassCard({
           <span>{danceClass.startTime} - {danceClass.endTime}</span>
         </div>
         <small>
-          {assignedMembers.length}/{danceClass.capacity}명 · {formatCurrency(danceClass.tuitionFee)}
+          {assignedMembers.length}/{danceClass.capacity}명
+          {danceClass.tuitionFee > 0 && <> · {formatCurrency(danceClass.tuitionFee)}</>}
         </small>
       </div>
+
+      {isPrivateClass(danceClass) && mode === 'idle' && (
+        <div className="privateActions">
+          <input
+            type="time"
+            value={timeValue}
+            onChange={(event) => setTimeValue(event.target.value)}
+            aria-label="수업 시작 시간"
+          />
+          <button
+            type="button"
+            className="timeSaveButton"
+            onClick={() => onUpdateClassTime(danceClass.id, timeValue)}
+          >
+            시간 변경
+          </button>
+          <button
+            type="button"
+            className="timeDeleteButton"
+            onClick={() => {
+              if (window.confirm(`'${danceClass.name}' 수업을 삭제할까요?`)) {
+                onRemoveClass(danceClass.id)
+              }
+            }}
+          >
+            삭제
+          </button>
+        </div>
+      )}
 
       {mode === 'idle' && (
         <div className="cardActions">
@@ -1988,6 +2160,7 @@ function MembersView({
     { label: '라인댄스', value: 'line_group' },
     { label: '라틴댄스', value: 'latin_group' },
     { label: '개인레슨', value: 'private' },
+    { label: '외부수업', value: 'external' },
   ]
   const visiblePasses =
     passCategory === 'all'
@@ -2095,6 +2268,7 @@ function MembersView({
               <option value="line_group">라인댄스 단체반</option>
               <option value="latin_group">라틴댄스 단체반</option>
               <option value="private">개인레슨</option>
+              <option value="external">외부수업</option>
             </select>
           </Field>
           <Field label="수업 횟수">
@@ -2207,7 +2381,7 @@ function MembersView({
             <input name="lastPaidAt" type="date" defaultValue={todayKey} />
           </Field>
         </div>
-        <Field label="다음 결제일">
+        <Field label="다음 결제일 (수강권 선택 시 자동: 그룹 3개월, 개인레슨 없음)">
           <input name="nextPaymentDue" type="date" defaultValue={addDays(30)} />
         </Field>
         <Field label="메모">
@@ -2388,22 +2562,24 @@ function MembersView({
                       rows={4}
                     />
                   </Field>
-                  <button type="submit" className="secondaryButton">회원 정보 저장</button>
-                  <button
-                    type="button"
-                    className="dangerButton"
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          `${member.name}님을 삭제할까요? 출석 기록도 함께 삭제되며 되돌릴 수 없습니다.`,
-                        )
-                      ) {
-                        onRemoveMember(member.id)
-                      }
-                    }}
-                  >
-                    회원 삭제
-                  </button>
+                  <div className="formActions">
+                    <button type="submit" className="secondaryButton">저장</button>
+                    <button
+                      type="button"
+                      className="dangerButton"
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `${member.name}님을 삭제할까요? 출석 기록도 함께 삭제되며 되돌릴 수 없습니다.`,
+                          )
+                        ) {
+                          onRemoveMember(member.id)
+                        }
+                      }}
+                    >
+                      삭제
+                    </button>
+                  </div>
                 </form>
                 </>
                 )}
@@ -2709,19 +2885,35 @@ function AttendanceView({
                 {records.length > 0 && (
                   <details className="historyDetails">
                     <summary>날짜별 이력 보기 ({records.length}건)</summary>
+                    <p className="hint historyHint">
+                      항목을 누르면 그 날짜 출석부로 이동해서 수정할 수 있어요.
+                    </p>
                     <ul>
-                      {records.slice(0, 12).map((record) => (
-                        <li key={`${record.date}-${record.classId}`}>
-                          <span>{record.date}</span>
-                          <em>
-                            {classes.find((danceClass) => danceClass.id === record.classId)
-                              ?.name ?? '삭제된 수업'}
-                          </em>
-                          <b className={`state-${record.status}`}>
-                            {attendanceLabel(record.status)}
-                          </b>
-                        </li>
-                      ))}
+                      {records.slice(0, 12).map((record) => {
+                        const recordClass = classes.find(
+                          (danceClass) => danceClass.id === record.classId,
+                        )
+                        return (
+                          <li key={`${record.date}-${record.classId}`}>
+                            <button
+                              type="button"
+                              disabled={!recordClass}
+                              onClick={() => {
+                                if (!recordClass) return
+                                setSelectedClassId(record.classId)
+                                setAttendanceDate(record.date)
+                                window.scrollTo({ behavior: 'smooth', top: 0 })
+                              }}
+                            >
+                              <span>{record.date}</span>
+                              <em>{recordClass?.name ?? '삭제된 수업'}</em>
+                              <b className={`state-${record.status}`}>
+                                {attendanceLabel(record.status)}
+                              </b>
+                            </button>
+                          </li>
+                        )
+                      })}
                       {records.length > 12 && <li className="moreRecords">외 {records.length - 12}건</li>}
                     </ul>
                   </details>
@@ -2767,6 +2959,10 @@ function PaymentsView({
   const lastMonthTotal = allPayments
     .filter((payment) => payment.date.startsWith(lastMonthKey))
     .reduce((sum, payment) => sum + payment.amount, 0)
+  const monthCount = allPayments.filter((payment) => payment.date.startsWith(monthKey)).length
+  const unpaidTotal = members
+    .filter((member) => paymentStatusOf(member) === 'unpaid')
+    .reduce((sum, member) => sum + member.paidAmount, 0)
   const visibleMembers =
     statusFilter === 'all'
       ? members
@@ -2781,10 +2977,13 @@ function PaymentsView({
   return (
     <section className="screen">
       <section className="paymentHero">
-        <p>이번 달 수납액</p>
+        <p>이번 달 받은 금액{monthCount > 0 && ` (${monthCount}건)`}</p>
         <strong>{formatCurrency(monthTotal)}</strong>
         <span>지난달 {formatCurrency(lastMonthTotal)}</span>
         <span>완납 {counts.paid} · 임박 {counts.soon} · 미납 {counts.unpaid}</span>
+        {unpaidTotal > 0 && (
+          <span className="heroDanger">밀린 회비 {formatCurrency(unpaidTotal)}</span>
+        )}
       </section>
 
       <section className="panel">
@@ -2857,10 +3056,10 @@ function PaymentsView({
                   onClick={() => {
                     if (
                       window.confirm(
-                        `${member.name}님 재결제 처리할까요?\n· 결제일: 오늘\n· 다음 결제: 30일 뒤${
+                        `${member.name}님 재결제 처리할까요?\n· 결제일: 오늘${
                           member.totalCredits > 0
-                            ? `\n· 잔여횟수: ${member.totalCredits}회로 초기화`
-                            : ''
+                            ? `\n· 잔여횟수 ${member.totalCredits}회로 충전${member.nextPaymentDue ? '\n· 유효기간 3개월 연장' : ''}`
+                            : '\n· 다음 결제일 1개월 뒤로'
                         }`,
                       )
                     ) {
@@ -3005,20 +3204,22 @@ function SmsTemplateEditor({
       </p>
       {fields.map((field) => (
         <div className="field" key={field.name}>
-          <span>{field.label}</span>
+          <div className="labelRow">
+            <span>{field.label}</span>
+            <button
+              type="button"
+              className="copyButton"
+              onClick={() => onCopy(field.ref.current?.value ?? '')}
+            >
+              전체 복사
+            </button>
+          </div>
           <textarea
             name={field.name}
             defaultValue={smsTemplates[field.name]}
             rows={3}
             ref={field.ref}
           />
-          <button
-            type="button"
-            className="copyButton"
-            onClick={() => onCopy(field.ref.current?.value ?? '')}
-          >
-            전체 복사
-          </button>
         </div>
       ))}
     </>
@@ -3082,6 +3283,7 @@ function passCategoryLabel(type: LessonType | 'group') {
     line_group: '라인댄스 단체반',
     latin_group: '라틴댄스 단체반',
     private: '개인레슨',
+    external: '외부수업',
     group: '라인댄스 단체반',
   }[type]
 }

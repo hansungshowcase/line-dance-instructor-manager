@@ -49,7 +49,7 @@ test('instructor can manage classes, members, attendance, and payment details', 
   await page.locator('.memberLookupCard').filter({ hasText: '최하은' }).locator('.editMemberButton').click()
   await expect(page.getByText('₩95,000').first()).toBeVisible()
   await page.locator('.memberLookupCard').filter({ hasText: '최하은' }).locator('textarea[name="note"]').fill('첫 상담 완료, 다음 주 등록 예정')
-  await page.locator('.memberLookupCard').filter({ hasText: '최하은' }).getByRole('button', { name: '회원 정보 저장' }).click()
+  await page.locator('.memberLookupCard').filter({ hasText: '최하은' }).getByRole('button', { name: '저장', exact: true }).click()
   await page.locator('.memberLookupCard').filter({ hasText: '최하은' }).locator('.editMemberButton').click()
   await expect(
     page.locator('.memberLookupFoot').filter({ hasText: '첫 상담 완료, 다음 주 등록 예정' }),

@@ -25,12 +25,12 @@
   justify-content: space-between;
   align-items: center;
   gap: 16px;
-  min-height: 120px;
+  min-height: 130px;
   border-radius: var(--radius-lg);
-  padding: 24px 20px;
-  color: var(--ink);
-  background: var(--panel);
-  box-shadow: var(--shadow);
+  padding: 22px 20px;
+  color: white;
+  background: var(--grad);
+  box-shadow: var(--shadow-primary);
 }
 
 .heroInfo p,
@@ -41,13 +41,13 @@
 
 .heroInfo p {
   margin: 0 0 6px;
-  color: var(--muted);
+  color: rgba(255, 255, 255, 0.8);
   font-size: 13px;
   font-weight: 600;
 }
 
 .heroInfo strong {
-  font-size: 27px;
+  font-size: 26px;
   font-weight: 800;
   letter-spacing: -0.02em;
   line-height: 1.15;
@@ -57,11 +57,11 @@
   margin-top: 9px;
   width: fit-content;
   border-radius: 999px;
-  background: var(--primary-soft);
+  background: rgba(255, 255, 255, 0.2);
   padding: 5px 11px;
-  color: var(--primary-deep);
+  color: white;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .heroBand > button {
@@ -71,12 +71,12 @@
   gap: 2px;
   min-height: 44px;
   border-radius: 999px;
-  background: var(--primary);
-  color: white;
+  background: white;
+  color: var(--primary-deep);
   padding: 11px 15px 11px 17px;
   font-size: 13px;
   font-weight: 700;
-  box-shadow: var(--shadow-primary);
+  box-shadow: 0 8px 20px rgba(74, 99, 216, 0.28);
 }
 
 /* ---------- 지표 카드 ---------- */
@@ -256,8 +256,8 @@ button.rowItem:active {
 }
 
 .rowItem.live {
-  border-color: rgba(49, 130, 246, 0.35);
-  background: var(--primary-soft);
+  border-color: rgba(109, 135, 250, 0.4);
+  background: linear-gradient(135deg, var(--primary-soft), #ffffff 65%);
 }
 
 .rowTime {
@@ -417,9 +417,9 @@ button.rowItem:active {
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: var(--primary);
+  background: var(--charcoal);
   color: white;
-  box-shadow: var(--shadow-primary);
+  box-shadow: 0 6px 16px rgba(46, 49, 56, 0.22);
   transition: transform 0.15s ease;
 }
 
@@ -492,9 +492,8 @@ button.rowItem:active {
   align-items: flex-start;
   gap: 12px;
   padding: 18px 16px 15px;
-  color: var(--ink);
-  background: var(--panel);
-  border-bottom: 1px solid var(--line);
+  color: white;
+  background: var(--grad);
 }
 
 .scheduleHeader h2 {
@@ -503,7 +502,7 @@ button.rowItem:active {
 
 .scheduleHeader p {
   margin: 0;
-  color: var(--muted);
+  color: rgba(255, 255, 255, 0.8);
   font-size: 13px;
   font-weight: 600;
 }
@@ -511,8 +510,7 @@ button.rowItem:active {
 .scheduleHeader > span {
   flex: 0 0 auto;
   border-radius: 999px;
-  background: var(--soft);
-  color: var(--sub);
+  background: rgba(255, 255, 255, 0.22);
   padding: 7px 11px;
   font-size: 12px;
   font-weight: 700;
@@ -550,9 +548,9 @@ button.rowItem:active {
 }
 
 .dayStrip .selected {
-  background: var(--primary);
+  background: var(--charcoal);
   color: white;
-  box-shadow: var(--shadow-primary);
+  box-shadow: 0 8px 18px rgba(46, 49, 56, 0.24);
 }
 
 .dayStrip strong {
@@ -633,7 +631,7 @@ button.rowItem:active {
 }
 
 .hourRow.hasClass .hourStamp {
-  background: var(--primary);
+  background: var(--charcoal);
   color: white;
 }
 
@@ -695,8 +693,8 @@ button.rowItem:active {
 
 .timeClassCard {
   border-radius: var(--radius-md);
-  background: #f7f9fb;
-  border: 1px solid var(--line);
+  background: linear-gradient(150deg, var(--primary-soft), #ffffff 60%);
+  border: 1px solid rgba(109, 135, 250, 0.22);
   padding: 12px 13px;
 }
 
@@ -1113,11 +1111,11 @@ button {
   gap: 8px;
   min-height: 52px;
   border-radius: var(--radius-md);
-  background: var(--primary);
+  background: var(--charcoal);
   color: white;
   font-weight: 700;
   font-size: 16px;
-  box-shadow: var(--shadow-primary);
+  box-shadow: 0 10px 22px rgba(46, 49, 56, 0.2);
   transition: transform 0.15s ease;
 }
 
@@ -1128,9 +1126,9 @@ button {
 }
 
 .secondaryButton {
-  background: var(--soft);
+  background: white;
   color: var(--ink);
-  border: 0;
+  border: 1px solid var(--line-strong);
   box-shadow: none;
 }
 
@@ -1184,26 +1182,26 @@ button {
 }
 
 .memberDirectoryHero {
-  padding: calc(24px + env(safe-area-inset-top)) 20px 16px;
-  background: var(--surface);
-  color: var(--ink);
+  padding: calc(28px + env(safe-area-inset-top)) 20px 54px;
+  background: var(--grad);
+  color: white;
 }
 
 .memberHeroTitle {
   display: flex;
   flex-direction: column;
   gap: 5px;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 
 .memberHeroTitle span {
-  color: var(--muted);
+  color: rgba(255, 255, 255, 0.75);
   font-size: 12px;
   font-weight: 600;
 }
 
 .memberHeroTitle strong {
-  font-size: 23px;
+  font-size: 22px;
   font-weight: 800;
   letter-spacing: -0.02em;
   line-height: 1.25;
@@ -1227,24 +1225,24 @@ button {
 }
 
 .memberSearchBox {
-  min-height: 54px;
+  min-height: 56px;
   border: 0;
-  border-radius: var(--radius-md);
-  background: var(--panel);
-  box-shadow: var(--shadow);
+  border-radius: 999px;
+  background: white;
+  box-shadow: 0 14px 30px rgba(74, 99, 216, 0.28);
 }
 
 .memberSearchBox svg {
-  color: var(--muted);
+  color: #aeb3c0;
 }
 
 .memberDirectorySheet {
   position: relative;
   z-index: 1;
-  margin: 0 16px;
-  border-radius: var(--radius-lg);
+  margin-top: -26px;
+  border-radius: 26px 26px 0 0;
   background: var(--panel);
-  box-shadow: var(--shadow);
+  box-shadow: 0 -12px 28px rgba(38, 40, 46, 0.06);
   overflow: hidden;
 }
 
@@ -1405,8 +1403,8 @@ button {
 }
 
 .status-active {
-  background: var(--primary-soft) !important;
-  color: var(--primary-deep);
+  background: #545c94 !important;
+  color: white;
 }
 
 .status-prospect {
@@ -1511,12 +1509,15 @@ button {
 }
 
 .editMemberButton {
-  min-height: 44px;
-  border-radius: var(--radius-md);
+  align-self: flex-end;
+  min-height: 40px;
+  min-width: 96px;
+  border-radius: 999px;
   border: 1px solid var(--line-strong);
   background: white;
   color: var(--ink);
-  font-size: 14px;
+  padding: 0 18px;
+  font-size: 13px;
   font-weight: 700;
   transition: all 0.15s ease;
 }
@@ -1819,13 +1820,33 @@ button {
 }
 
 .historyDetails li {
+  display: block;
+}
+
+.historyDetails li > button {
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 10px;
+  min-height: 44px;
   border-radius: var(--radius-sm);
   background: var(--soft);
   padding: 9px 11px;
   font-size: 13px;
+  text-align: left;
+  transition: transform 0.12s ease;
+}
+
+.historyDetails li > button:active {
+  transform: scale(0.98);
+}
+
+.historyDetails li > button:disabled {
+  opacity: 0.55;
+}
+
+.historyHint {
+  margin: 6px 0 0;
 }
 
 .historyDetails li span {
@@ -1983,32 +2004,31 @@ button {
 
 .paymentHero {
   border-radius: var(--radius-lg);
-  padding: 22px 20px;
-  color: var(--ink);
-  background: var(--panel);
-  box-shadow: var(--shadow);
+  padding: 20px;
+  color: white;
+  background: var(--grad);
+  box-shadow: var(--shadow-primary);
 }
 
 .paymentHero p {
   margin: 0 0 6px;
-  color: var(--muted);
+  color: rgba(255, 255, 255, 0.8);
   font-size: 13px;
   font-weight: 600;
 }
 
 .paymentHero strong {
   display: block;
-  font-size: 32px;
+  font-size: 29px;
   font-weight: 800;
   letter-spacing: -0.02em;
 }
 
 .paymentHero span {
   display: inline-block;
-  margin-top: 10px;
+  margin-top: 9px;
   border-radius: 999px;
-  background: var(--soft);
-  color: var(--sub);
+  background: rgba(255, 255, 255, 0.2);
   padding: 6px 11px;
   font-size: 12px;
   font-weight: 600;
@@ -2016,6 +2036,48 @@ button {
 
 .paymentHero span + span {
   margin-left: 6px;
+}
+
+.paymentHero .heroDanger {
+  background: white;
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.privateActions {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  border-top: 1px solid rgba(109, 135, 250, 0.14);
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+.privateActions input {
+  min-height: 44px;
+  padding: 9px 11px;
+  font-size: 15px;
+}
+
+.privateActions .timeSaveButton {
+  min-height: 44px;
+  border-radius: var(--radius-sm);
+  background: var(--primary);
+  color: white;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.privateActions .timeDeleteButton {
+  min-height: 44px;
+  border: 1px solid rgba(224, 73, 47, 0.3);
+  border-radius: var(--radius-sm);
+  background: white;
+  color: var(--danger);
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .paymentFilters {
@@ -2368,8 +2430,8 @@ button {
 /* ---------- 미납 강조 패널 ---------- */
 
 .unpaidPanel {
-  border-color: rgba(240, 68, 82, 0.3);
-  background: var(--panel);
+  border-color: rgba(224, 73, 47, 0.32);
+  background: linear-gradient(160deg, var(--danger-soft), #ffffff 55%);
 }
 
 .unpaidPanel h2 {
@@ -2382,7 +2444,7 @@ button {
   width: 100%;
   min-height: 48px;
   border-radius: var(--radius-sm);
-  background: var(--primary);
+  background: var(--charcoal);
   color: white;
   font-size: 14px;
   font-weight: 700;
@@ -2473,11 +2535,11 @@ button {
 .draftConfirm {
   min-height: 46px;
   border-radius: var(--radius-sm);
-  background: var(--primary);
+  background: var(--ok);
   color: white;
   font-size: 14px;
   font-weight: 700;
-  box-shadow: var(--shadow-primary);
+  box-shadow: 0 8px 18px rgba(21, 154, 91, 0.28);
   transition: transform 0.15s ease;
 }
 
@@ -2582,15 +2644,57 @@ button {
   cursor: default;
 }
 
+.labelRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.labelRow > span {
+  color: var(--sub);
+  font-size: 12px;
+  font-weight: 600;
+  padding-left: 2px;
+}
+
+.formActions {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 8px;
+}
+
+.monthNav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.monthNav button {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  background: var(--soft);
+  color: var(--sub);
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.monthNav strong {
+  min-width: 76px;
+  text-align: center;
+}
+
 .copyButton {
-  align-self: flex-end;
-  min-height: 40px;
+  min-height: 36px;
   border: 1px solid var(--line-strong);
   border-radius: 999px;
   background: white;
   color: var(--primary-deep);
-  padding: 9px 18px;
-  font-size: 13px;
+  padding: 6px 14px;
+  font-size: 12px;
   font-weight: 700;
   transition: all 0.15s ease;
 }
@@ -2618,9 +2722,9 @@ button {
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: var(--primary);
+  background: var(--charcoal);
   color: white;
-  box-shadow: 0 10px 24px rgba(49, 130, 246, 0.4);
+  box-shadow: 0 12px 28px rgba(46, 49, 56, 0.35);
   transition: transform 0.15s ease;
 }
 
