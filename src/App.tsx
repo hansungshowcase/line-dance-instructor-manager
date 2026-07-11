@@ -1365,31 +1365,44 @@ function HomeView({
         </Field>
       </FormDrawer>
 
-      <section className="panel">
-        <h2>데이터 백업</h2>
-        <p className="hint ruleHint">
-          모든 데이터는 이 기기에만 저장됩니다. 폰을 바꾸거나 브라우저 데이터를 지우면 사라지니
-          주기적으로 파일로 내보내 두세요.
-          {backupAgeDays !== null && ` (마지막 백업: ${backupAgeDays === 0 ? '오늘' : `${backupAgeDays}일 전`})`}
-        </p>
-        <div className="split backupActions">
-          <button type="button" className="secondaryButton" onClick={onExport}>
-            파일로 내보내기
-          </button>
-          <label className="secondaryButton importButton">
-            백업 가져오기
-            <input
-              type="file"
-              accept="application/json,.json"
-              onChange={(event) => {
-                const file = event.target.files?.[0]
-                if (file) onImport(file)
-                event.target.value = ''
-              }}
-            />
-          </label>
+      <details className="formDrawer">
+        <summary>
+          <span>
+            <strong>데이터 백업</strong>
+            <small>
+              {backupAgeDays === null
+                ? '백업 기록 없음'
+                : `마지막 백업: ${backupAgeDays === 0 ? '오늘' : `${backupAgeDays}일 전`}`}
+            </small>
+          </span>
+          <i className="drawerIcon static" aria-hidden="true">
+            <Download size={16} />
+          </i>
+        </summary>
+        <div className="drawerBody">
+          <p className="hint ruleHint">
+            모든 데이터는 이 기기에만 저장됩니다. 폰을 바꾸거나 브라우저 데이터를 지우면
+            사라지니 주기적으로 파일로 내보내 두세요.
+          </p>
+          <div className="split backupActions">
+            <button type="button" className="secondaryButton" onClick={onExport}>
+              파일로 내보내기
+            </button>
+            <label className="secondaryButton importButton">
+              백업 가져오기
+              <input
+                type="file"
+                accept="application/json,.json"
+                onChange={(event) => {
+                  const file = event.target.files?.[0]
+                  if (file) onImport(file)
+                  event.target.value = ''
+                }}
+              />
+            </label>
+          </div>
         </div>
-      </section>
+      </details>
     </section>
   )
 }

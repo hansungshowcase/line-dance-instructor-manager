@@ -961,6 +961,19 @@ button.rowItem:active {
   color: white;
 }
 
+.formDrawer[open] .drawerIcon.static {
+  transform: none;
+}
+
+.drawerBody {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  padding: 16px;
+  background: #fcfcfe;
+}
+
 .classEditor summary svg {
   flex: 0 0 auto;
   color: var(--muted);
