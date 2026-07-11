@@ -4,7 +4,8 @@ test.use({ viewport: { width: 390, height: 844 } })
 
 test.beforeEach(async ({ page }) => {
   page.on('dialog', (dialog) => dialog.accept())
-  await page.goto('./')
+  // 실사용 배포는 빈 상태로 시작하므로, 테스트는 ?demo 모드의 샘플 데이터를 사용한다
+  await page.goto('./?demo')
   await page.evaluate(() => localStorage.clear())
   await page.reload()
 })

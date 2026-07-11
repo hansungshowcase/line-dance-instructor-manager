@@ -80,9 +80,13 @@ type AttendanceBook = Record<string, AttendanceStatus>
 const weekdays = ['일', '월', '화', '수', '목', '금', '토']
 const today = new Date()
 const todayKey = toDateKey(today)
-const storageKey = 'line-dance-manager-v2'
+// v3: 실사용 시작 — 샘플 없이 빈 상태로 시작하고, 이전 테스트 데이터는 무시한다
+const storageKey = 'line-dance-manager-v3'
 const backupKey = 'line-dance-backup-at'
 const smsTemplateKey = 'line-dance-sms-templates'
+// 주소 뒤에 ?demo 를 붙였을 때만 연습용 샘플 데이터가 보인다
+const isDemoMode =
+  typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('demo')
 
 const defaultSmsTemplates = {
   unpaid: '회원님 안녕하세요~ 수강료 결제일이 지나서 안내드려요. 확인 부탁드립니다 :)',
@@ -374,12 +378,15 @@ function isPrivateClass(danceClass: DanceClass) {
 }
 
 function useStoredData() {
-  const [members, setMembers] = useState<Member[]>(seedMembers)
-  const [classes, setClasses] = useState<DanceClass[]>(seedClasses)
-  const [passTemplates, setPassTemplates] = useState<PassTemplate[]>(seedPassTemplates)
+  const [members, setMembers] = useState<Member[]>(isDemoMode ? seedMembers : [])
+  const [classes, setClasses] = useState<DanceClass[]>(isDemoMode ? seedClasses : [])
+  const [passTemplates, setPassTemplates] = useState<PassTemplate[]>(
+    isDemoMode ? seedPassTemplates : [],
+  )
   const [attendance, setAttendance] = useState<AttendanceBook>({})
 
   useEffect(() => {
+    if (isDemoMode) return
     const raw = localStorage.getItem(storageKey)
     if (!raw) return
     try {
@@ -415,6 +422,7 @@ function useStoredData() {
   }, [])
 
   useEffect(() => {
+    if (isDemoMode) return
     localStorage.setItem(
       storageKey,
       JSON.stringify({ members, classes, passTemplates, attendance }),
@@ -446,7 +454,7 @@ function App() {
   } = useStoredData()
   const [tab, setTab] = useState<Tab>('home')
   const [query, setQuery] = useState('')
-  const [selectedClassId, setSelectedClassId] = useState(seedClasses[0].id)
+  const [selectedClassId, setSelectedClassId] = useState(isDemoMode ? seedClasses[0].id : '')
   const [attendanceDate, setAttendanceDate] = useState(todayKey)
   const [convertedMemberId, setConvertedMemberId] = useState<string | null>(null)
   const [lastBackupAt, setLastBackupAt] = useState(() => localStorage.getItem(backupKey) ?? '')
@@ -541,9 +549,7 @@ function App() {
   const expiringOnly = expiringMembers.filter(
     (member) => !lowCreditMembers.some((lowCredit) => lowCredit.id === member.id),
   )
-  const seedMemberIds = new Set(seedMembers.map((member) => member.id))
-  const hasSampleData = members.some((member) => seedMemberIds.has(member.id))
-  const hasRealData = members.some((member) => !seedMemberIds.has(member.id))
+  const hasRealData = !isDemoMode && members.length > 0
   const backupAgeDays = lastBackupAt
     ? Math.floor((today.getTime() - new Date(lastBackupAt).getTime()) / 86400000)
     : null
@@ -1119,29 +1125,6 @@ function App() {
     }, 150)
   }
 
-  function clearSampleData() {
-    if (
-      !window.confirm(
-        '샘플 회원·수업·수강권을 모두 지울까요? 직접 등록한 데이터는 그대로 남습니다.',
-      )
-    )
-      return
-    const sampleClassIds = new Set(seedClasses.map((danceClass) => danceClass.id))
-    const samplePassIds = new Set(seedPassTemplates.map((pass) => pass.id))
-    setMembers((current) => current.filter((member) => !seedMemberIds.has(member.id)))
-    setClasses((current) => current.filter((danceClass) => !sampleClassIds.has(danceClass.id)))
-    setPassTemplates((current) => current.filter((pass) => !samplePassIds.has(pass.id)))
-    setAttendance((current) =>
-      Object.fromEntries(
-        Object.entries(current).filter(([key]) => {
-          const [, classId, memberId] = key.split('|')
-          return !seedMemberIds.has(memberId) && !sampleClassIds.has(classId)
-        }),
-      ),
-    )
-    notify('샘플 데이터를 정리했습니다')
-  }
-
   function importData(file: File) {
     const reader = new FileReader()
     reader.onload = () => {
@@ -1227,10 +1210,8 @@ function App() {
           backupOverdue={backupOverdue}
           onCopyText={copyText}
           expiringMembers={expiringOnly}
-          hasSampleData={hasSampleData}
           lowCreditMembers={lowCreditMembers}
           members={members}
-          onClearSamples={clearSampleData}
           onExport={exportData}
           onExportCsv={exportCsv}
           onImport={importData}
@@ -1368,10 +1349,8 @@ function HomeView({
   backupOverdue,
   onCopyText,
   expiringMembers,
-  hasSampleData,
   lowCreditMembers,
   members,
-  onClearSamples,
   onExport,
   onExportCsv,
   onImport,
@@ -1386,10 +1365,8 @@ function HomeView({
   backupOverdue: boolean
   onCopyText: (text: string) => void
   expiringMembers: Member[]
-  hasSampleData: boolean
   lowCreditMembers: Member[]
   members: Member[]
-  onClearSamples: () => void
   onExport: () => void
   onExportCsv: () => void
   onImport: (file: File) => void
@@ -1615,11 +1592,6 @@ function HomeView({
             <button type="button" className="secondaryButton" onClick={onExportCsv}>
               엑셀로 내보내기
             </button>
-            {hasSampleData && (
-              <button type="button" className="dangerButton" onClick={onClearSamples}>
-                샘플 데이터 지우기
-              </button>
-            )}
           </div>
         </div>
       </details>
