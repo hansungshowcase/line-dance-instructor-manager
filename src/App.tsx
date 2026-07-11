@@ -1779,14 +1779,12 @@ function MembersView({
                               : `${dueDays}일 남음`}
                         </dd>
                       </div>
-                      <div>
-                        <dt>잔여횟수</dt>
-                        <dd>
-                          {member.totalCredits > 0
-                            ? `${member.remainingCredits}/${member.totalCredits}회 남음`
-                            : '기간제 (횟수 제한 없음)'}
-                        </dd>
-                      </div>
+                      {member.totalCredits > 0 && (
+                        <div>
+                          <dt>잔여횟수</dt>
+                          <dd>{member.remainingCredits}/{member.totalCredits}회 남음</dd>
+                        </div>
+                      )}
                       <div>
                         <dt>최근 출석일</dt>
                         <dd>{lastPresent || '기록 없음'}</dd>
@@ -2352,21 +2350,29 @@ function PaymentsView({
                   <b className={payStatus}>{paymentLabel(payStatus)}</b>
                 </div>
                 <div className="paymentSummary">
-                  <span>
-                    남은 횟수{' '}
-                    <b>
-                      {member.totalCredits > 0
-                        ? `${member.remainingCredits}/${member.totalCredits}회`
-                        : '기간제'}
-                    </b>
-                  </span>
+                  {member.totalCredits > 0 ? (
+                    <span>
+                      남은 횟수 <b>{member.remainingCredits}/{member.totalCredits}회</b>
+                    </span>
+                  ) : (
+                    <span>
+                      잔여기간{' '}
+                      <b>
+                        {(() => {
+                          const days = daysUntil(member.nextPaymentDue || member.passUntil)
+                          if (days === null) return '-'
+                          return days < 0 ? `${Math.abs(days)}일 지남` : `${days}일 남음`
+                        })()}
+                      </b>
+                    </span>
+                  )}
                   <span>결제 금액 <b>{formatCurrency(member.paidAmount)}</b></span>
                   <span>최근 결제 <b>{member.lastPaidAt || '-'}</b></span>
                   <span>다음 결제 <b>{member.nextPaymentDue || '-'}</b></span>
                 </div>
                 <button
                   type="button"
-                  className="renewButton"
+                  className={payStatus === 'paid' ? 'renewButton subtle' : 'renewButton'}
                   onClick={() => {
                     if (
                       window.confirm(
