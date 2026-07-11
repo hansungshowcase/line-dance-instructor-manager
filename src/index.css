@@ -55,6 +55,8 @@ body {
   word-break: keep-all;
   overflow-x: hidden;
   overscroll-behavior-y: none;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 button,

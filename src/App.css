@@ -1273,7 +1273,9 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  margin-top: 3px;
+  min-height: 32px;
+  margin-top: 1px;
+  padding-block: 4px;
   color: var(--sub);
   font-size: 13px;
   font-weight: 500;
@@ -1484,7 +1486,9 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  margin-top: 3px;
+  min-height: 32px;
+  margin-top: 1px;
+  padding-block: 4px;
   color: var(--sub);
   font-size: 13px;
   font-weight: 500;
@@ -2125,10 +2129,11 @@ button {
 
 .passListItem button {
   flex: 0 0 auto;
+  min-height: 38px;
   border-radius: 999px;
   background: var(--danger-soft);
   color: var(--danger);
-  padding: 7px 12px;
+  padding: 9px 15px;
   font-size: 12px;
   font-weight: 700;
 }
@@ -2217,6 +2222,18 @@ button {
 }
 
 /* ---------- 좁은 화면 대응 ---------- */
+
+@media (max-width: 340px) {
+  .dayStrip {
+    gap: 3px;
+    padding: 10px 8px;
+  }
+
+  .appShell {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+}
 
 @media (max-width: 390px) {
   .attendanceRow {
