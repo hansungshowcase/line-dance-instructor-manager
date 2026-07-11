@@ -25,12 +25,12 @@
   justify-content: space-between;
   align-items: center;
   gap: 16px;
-  min-height: 130px;
+  min-height: 120px;
   border-radius: var(--radius-lg);
-  padding: 22px 20px;
-  color: white;
-  background: var(--grad);
-  box-shadow: var(--shadow-primary);
+  padding: 24px 20px;
+  color: var(--ink);
+  background: var(--panel);
+  box-shadow: var(--shadow);
 }
 
 .heroInfo p,
@@ -41,13 +41,13 @@
 
 .heroInfo p {
   margin: 0 0 6px;
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--muted);
   font-size: 13px;
   font-weight: 600;
 }
 
 .heroInfo strong {
-  font-size: 26px;
+  font-size: 27px;
   font-weight: 800;
   letter-spacing: -0.02em;
   line-height: 1.15;
@@ -57,11 +57,11 @@
   margin-top: 9px;
   width: fit-content;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--primary-soft);
   padding: 5px 11px;
-  color: white;
+  color: var(--primary-deep);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .heroBand > button {
@@ -71,12 +71,12 @@
   gap: 2px;
   min-height: 44px;
   border-radius: 999px;
-  background: white;
-  color: var(--primary-deep);
+  background: var(--primary);
+  color: white;
   padding: 11px 15px 11px 17px;
   font-size: 13px;
   font-weight: 700;
-  box-shadow: 0 8px 20px rgba(74, 99, 216, 0.28);
+  box-shadow: var(--shadow-primary);
 }
 
 /* ---------- 지표 카드 ---------- */
@@ -256,8 +256,8 @@ button.rowItem:active {
 }
 
 .rowItem.live {
-  border-color: rgba(109, 135, 250, 0.4);
-  background: linear-gradient(135deg, var(--primary-soft), #ffffff 65%);
+  border-color: rgba(49, 130, 246, 0.35);
+  background: var(--primary-soft);
 }
 
 .rowTime {
@@ -417,9 +417,9 @@ button.rowItem:active {
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: var(--charcoal);
+  background: var(--primary);
   color: white;
-  box-shadow: 0 6px 16px rgba(46, 49, 56, 0.22);
+  box-shadow: var(--shadow-primary);
   transition: transform 0.15s ease;
 }
 
@@ -492,8 +492,9 @@ button.rowItem:active {
   align-items: flex-start;
   gap: 12px;
   padding: 18px 16px 15px;
-  color: white;
-  background: var(--grad);
+  color: var(--ink);
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
 }
 
 .scheduleHeader h2 {
@@ -502,7 +503,7 @@ button.rowItem:active {
 
 .scheduleHeader p {
   margin: 0;
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--muted);
   font-size: 13px;
   font-weight: 600;
 }
@@ -510,7 +511,8 @@ button.rowItem:active {
 .scheduleHeader > span {
   flex: 0 0 auto;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.22);
+  background: var(--soft);
+  color: var(--sub);
   padding: 7px 11px;
   font-size: 12px;
   font-weight: 700;
@@ -548,9 +550,9 @@ button.rowItem:active {
 }
 
 .dayStrip .selected {
-  background: var(--charcoal);
+  background: var(--primary);
   color: white;
-  box-shadow: 0 8px 18px rgba(46, 49, 56, 0.24);
+  box-shadow: var(--shadow-primary);
 }
 
 .dayStrip strong {
@@ -631,7 +633,7 @@ button.rowItem:active {
 }
 
 .hourRow.hasClass .hourStamp {
-  background: var(--charcoal);
+  background: var(--primary);
   color: white;
 }
 
@@ -693,8 +695,8 @@ button.rowItem:active {
 
 .timeClassCard {
   border-radius: var(--radius-md);
-  background: linear-gradient(150deg, var(--primary-soft), #ffffff 60%);
-  border: 1px solid rgba(109, 135, 250, 0.22);
+  background: #f7f9fb;
+  border: 1px solid var(--line);
   padding: 12px 13px;
 }
 
@@ -835,12 +837,11 @@ button.rowItem:active {
 }
 
 .monthGrid button {
-  height: 72px;
+  min-height: 64px;
   display: flex;
   flex-direction: column;
   gap: 3px;
   align-items: flex-start;
-  overflow: hidden;
   border-right: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
   background: var(--panel);
@@ -1112,11 +1113,11 @@ button {
   gap: 8px;
   min-height: 52px;
   border-radius: var(--radius-md);
-  background: var(--charcoal);
+  background: var(--primary);
   color: white;
   font-weight: 700;
   font-size: 16px;
-  box-shadow: 0 10px 22px rgba(46, 49, 56, 0.2);
+  box-shadow: var(--shadow-primary);
   transition: transform 0.15s ease;
 }
 
@@ -1127,9 +1128,9 @@ button {
 }
 
 .secondaryButton {
-  background: white;
+  background: var(--soft);
   color: var(--ink);
-  border: 1px solid var(--line-strong);
+  border: 0;
   box-shadow: none;
 }
 
@@ -1183,26 +1184,26 @@ button {
 }
 
 .memberDirectoryHero {
-  padding: calc(28px + env(safe-area-inset-top)) 20px 54px;
-  background: var(--grad);
-  color: white;
+  padding: calc(24px + env(safe-area-inset-top)) 20px 16px;
+  background: var(--surface);
+  color: var(--ink);
 }
 
 .memberHeroTitle {
   display: flex;
   flex-direction: column;
   gap: 5px;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 
 .memberHeroTitle span {
-  color: rgba(255, 255, 255, 0.75);
+  color: var(--muted);
   font-size: 12px;
   font-weight: 600;
 }
 
 .memberHeroTitle strong {
-  font-size: 22px;
+  font-size: 23px;
   font-weight: 800;
   letter-spacing: -0.02em;
   line-height: 1.25;
@@ -1226,24 +1227,24 @@ button {
 }
 
 .memberSearchBox {
-  min-height: 56px;
+  min-height: 54px;
   border: 0;
-  border-radius: 999px;
-  background: white;
-  box-shadow: 0 14px 30px rgba(74, 99, 216, 0.28);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  box-shadow: var(--shadow);
 }
 
 .memberSearchBox svg {
-  color: #aeb3c0;
+  color: var(--muted);
 }
 
 .memberDirectorySheet {
   position: relative;
   z-index: 1;
-  margin-top: -26px;
-  border-radius: 26px 26px 0 0;
+  margin: 0 16px;
+  border-radius: var(--radius-lg);
   background: var(--panel);
-  box-shadow: 0 -12px 28px rgba(38, 40, 46, 0.06);
+  box-shadow: var(--shadow);
   overflow: hidden;
 }
 
@@ -1404,8 +1405,8 @@ button {
 }
 
 .status-active {
-  background: #545c94 !important;
-  color: white;
+  background: var(--primary-soft) !important;
+  color: var(--primary-deep);
 }
 
 .status-prospect {
@@ -1982,31 +1983,32 @@ button {
 
 .paymentHero {
   border-radius: var(--radius-lg);
-  padding: 20px;
-  color: white;
-  background: var(--grad);
-  box-shadow: var(--shadow-primary);
+  padding: 22px 20px;
+  color: var(--ink);
+  background: var(--panel);
+  box-shadow: var(--shadow);
 }
 
 .paymentHero p {
   margin: 0 0 6px;
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--muted);
   font-size: 13px;
   font-weight: 600;
 }
 
 .paymentHero strong {
   display: block;
-  font-size: 29px;
+  font-size: 32px;
   font-weight: 800;
   letter-spacing: -0.02em;
 }
 
 .paymentHero span {
   display: inline-block;
-  margin-top: 9px;
+  margin-top: 10px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--soft);
+  color: var(--sub);
   padding: 6px 11px;
   font-size: 12px;
   font-weight: 600;
@@ -2366,8 +2368,8 @@ button {
 /* ---------- 미납 강조 패널 ---------- */
 
 .unpaidPanel {
-  border-color: rgba(224, 73, 47, 0.32);
-  background: linear-gradient(160deg, var(--danger-soft), #ffffff 55%);
+  border-color: rgba(240, 68, 82, 0.3);
+  background: var(--panel);
 }
 
 .unpaidPanel h2 {
@@ -2380,7 +2382,7 @@ button {
   width: 100%;
   min-height: 48px;
   border-radius: var(--radius-sm);
-  background: var(--charcoal);
+  background: var(--primary);
   color: white;
   font-size: 14px;
   font-weight: 700;
@@ -2471,11 +2473,11 @@ button {
 .draftConfirm {
   min-height: 46px;
   border-radius: var(--radius-sm);
-  background: var(--ok);
+  background: var(--primary);
   color: white;
   font-size: 14px;
   font-weight: 700;
-  box-shadow: 0 8px 18px rgba(21, 154, 91, 0.28);
+  box-shadow: var(--shadow-primary);
   transition: transform 0.15s ease;
 }
 
@@ -2616,9 +2618,9 @@ button {
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: var(--charcoal);
+  background: var(--primary);
   color: white;
-  box-shadow: 0 12px 28px rgba(46, 49, 56, 0.35);
+  box-shadow: 0 10px 24px rgba(49, 130, 246, 0.4);
   transition: transform 0.15s ease;
 }
 

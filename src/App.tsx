@@ -1543,7 +1543,7 @@ function ScheduleView({
                   key={dateKey}
                 >
                   <b>{date.getDate()}</b>
-                  {dayClasses.slice(0, 2).map((danceClass) => (
+                  {dayClasses.map((danceClass) => (
                     <span
                       className={`eventChip chip-${classColorIndex.get(danceClass.id) ?? 0}`}
                       key={danceClass.id}
@@ -1551,7 +1551,6 @@ function ScheduleView({
                       {danceClass.name}
                     </span>
                   ))}
-                  {dayClasses.length > 2 && <i className="moreChip">+{dayClasses.length - 2}</i>}
                 </button>
               )
             })}
@@ -1603,7 +1602,11 @@ function ScheduleView({
       </section>
 
       <section className="panel">
-        <h2>수업반 수정</h2>
+        <h2>수업 관리</h2>
+        <p className="hint storageHint">
+          시간표에 있는 수업의 이름·시간·장소를 바꾸거나 폐강할 때 사용해요. (수강권은 판매
+          상품, 여기는 실제 수업)
+        </p>
         <div className="listStack">
           {classes.map((danceClass) => (
             <details className="classEditor" key={danceClass.id}>
@@ -2431,11 +2434,6 @@ function ConsultationsView({
 
   return (
     <section className="screen">
-      <div className="metricGrid two">
-        <Metric label="상담만 한 회원" value={`${consultationMembers.length}명`} />
-        <Metric label="현재 대기" value={`${waitlistMembers.length}명`} tone="warn" />
-      </div>
-
       <FormDrawer id="drawer-consult" title="상담 등록" hint="문의 온 회원의 상담 내용을 기록" action={onAddConsultation}>
         <Field label="이름">
           <input name="name" placeholder="상담 회원 이름" required />
@@ -2666,7 +2664,6 @@ function AttendanceView({
         <div className="listStack">
           {memberStats.map(({ absent, lastPresent, member, monthPresent, present, records }) => {
             const usedCredits = Math.max(0, member.totalCredits - member.remainingCredits)
-            const passDays = daysUntil(member.passUntil)
             return (
               <article className="memberStatRow" key={member.id}>
                 <div className="taskAvatar">{member.name.slice(0, 1)}</div>
@@ -2675,23 +2672,12 @@ function AttendanceView({
                   <span>{member.passType}</span>
                 </div>
                 <div className="statBig">
-                  {member.totalCredits > 0 ? (
-                    <>
-                      <b className={member.remainingCredits <= 2 ? 'unpaid' : ''}>
-                        {member.remainingCredits}
-                      </b>
-                      <span>/{member.totalCredits}회 남음</span>
-                    </>
-                  ) : passDays !== null ? (
-                    <>
-                      <b className={passDays < 0 ? 'unpaid' : ''}>
-                        {passDays < 0 ? `${Math.abs(passDays)}일` : `${passDays}일`}
-                      </b>
-                      <span>{passDays < 0 ? '지남' : '남음'}</span>
-                    </>
-                  ) : (
-                    <span>-</span>
-                  )}
+                  <b>{present}</b>
+                  <span>
+                    {member.totalCredits > 0
+                      ? ` / ${member.totalCredits}회 출석`
+                      : '회 출석'}
+                  </span>
                 </div>
                 {member.totalCredits > 0 && (
                   <div
@@ -2711,9 +2697,14 @@ function AttendanceView({
                 )}
                 <div className="statChips">
                   <b className="ok">출석 {present}</b>
-                  <b className="danger">결석 {absent} (차감 없음)</b>
+                  <b className="danger">결석 {absent}</b>
+                  {member.totalCredits > 0 && (
+                    <b className={member.remainingCredits <= 2 ? 'danger' : ''}>
+                      잔여 {member.remainingCredits}회
+                    </b>
+                  )}
                   <b>이번 달 {monthPresent}회</b>
-                  <b>{lastPresent ? `최근 출석 ${lastPresent.slice(5).replace('-', '/')}` : '출석 기록 없음'}</b>
+                  <b>{lastPresent ? `최근 ${lastPresent.slice(5).replace('-', '/')}` : '기록 없음'}</b>
                 </div>
                 {records.length > 0 && (
                   <details className="historyDetails">
@@ -3040,26 +3031,6 @@ function Field({ children, label }: { children: React.ReactNode; label: string }
       <span>{label}</span>
       {children}
     </label>
-  )
-}
-
-function Metric({
-  label,
-  onClick,
-  tone,
-  value,
-}: {
-  label: string
-  onClick?: () => void
-  tone?: 'danger' | 'warn'
-  value: string
-}) {
-  return (
-    <button type="button" className={`metric ${tone ?? ''}`} onClick={onClick}>
-      <span>{label}</span>
-      <strong>{value}</strong>
-      {onClick && <ChevronRight size={15} className="metricArrow" />}
-    </button>
   )
 }
 
