@@ -44,6 +44,8 @@ test('instructor can manage classes, members, attendance, and payment details', 
     memberDrawer.locator('select[name="passTemplateId"] option', { hasText: '야간 라틴 8회' }),
   ).toHaveCount(1)
   await passDrawer.locator('summary').click()
+  // 카드를 탭하면 상세가 펼쳐진다
+  await page.locator('.memberLookupCard').filter({ hasText: '최하은' }).locator('.memberCardHead').click()
   await page.locator('.memberLookupCard').filter({ hasText: '최하은' }).locator('.editMemberButton').click()
   await expect(page.getByText('₩95,000').first()).toBeVisible()
   await page.locator('.memberLookupCard').filter({ hasText: '최하은' }).locator('textarea[name="note"]').fill('첫 상담 완료, 다음 주 등록 예정')
@@ -66,7 +68,6 @@ test('instructor can manage classes, members, attendance, and payment details', 
   const paymentCard = page.locator('.paymentCard').filter({ hasText: '최하은' })
   await paymentCard.locator('details.paymentEditor summary').click()
   await paymentCard.locator('input[name="nextPaymentDue"]').fill('2026-01-01')
-  await paymentCard.locator('input[name="passUntil"]').fill('2026-01-01')
   await paymentCard.getByRole('button', { name: '저장' }).click()
   await expect(paymentCard.locator('b.unpaid')).toHaveText('미납')
 
