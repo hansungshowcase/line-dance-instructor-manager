@@ -6,6 +6,7 @@ import {
   ClipboardList,
   Home,
   MapPin,
+  MessageCircle,
   Phone,
   PhoneCall,
   Plus,
@@ -280,6 +281,22 @@ function daysUntil(dateKey: string) {
   return Math.ceil((new Date(dateKey).getTime() - today.getTime()) / 86400000)
 }
 
+// 결제 상태는 잔여횟수·다음 결제일 기준으로 자동 판정한다 (수동 변경 불필요)
+function paymentStatusOf(member: Member): PaymentStatus {
+  if (member.totalCredits > 0 && member.remainingCredits <= 0) return 'unpaid'
+  const dueDate = member.nextPaymentDue || member.passUntil
+  if (!dueDate) return member.paymentStatus
+  const daysLeft = daysUntil(dueDate) ?? 0
+  if (daysLeft < 0) return 'unpaid'
+  if (daysLeft <= 7) return 'soon'
+  return 'paid'
+}
+
+function smsHref(phone: string, body: string) {
+  const separator = /iPhone|iPad|iPod/i.test(navigator.userAgent) ? '&' : '?'
+  return `sms:${phone}${separator}body=${encodeURIComponent(body)}`
+}
+
 function startOfWeek(date: Date) {
   const copy = new Date(date)
   const diff = copy.getDay() === 0 ? -6 : 1 - copy.getDay()
@@ -402,9 +419,9 @@ function App() {
   const consultationMembers = members.filter((member) => member.status === 'prospect')
   const waitlistMembers = members.filter((member) => member.status === 'waitlist')
   const todayClasses = classes.filter((item) => item.weekday === today.getDay())
-  const unpaidMembers = activeMembers.filter((member) => member.paymentStatus === 'unpaid')
+  const unpaidMembers = activeMembers.filter((member) => paymentStatusOf(member) === 'unpaid')
   const expiringMembers = activeMembers.filter((member) => {
-    if (member.paymentStatus === 'unpaid') return false
+    if (paymentStatusOf(member) === 'unpaid') return false
     const dueDate = new Date(member.nextPaymentDue || member.passUntil)
     const daysLeft = Math.ceil((dueDate.getTime() - today.getTime()) / 86400000)
     return daysLeft <= 10
@@ -415,7 +432,7 @@ function App() {
     : []
   const lowCreditMembers = activeMembers.filter(
     (member) =>
-      member.paymentStatus !== 'unpaid' &&
+      paymentStatusOf(member) !== 'unpaid' &&
       member.totalCredits > 0 &&
       member.remainingCredits <= 2,
   )
@@ -541,7 +558,7 @@ function App() {
   }
 
   function updateMember(memberId: string, formData: FormData) {
-    const classId = String(formData.get('classId') ?? '')
+    const classIds = formData.getAll('classIds').map(String)
     setMembers((current) =>
       current.map((member) =>
         member.id === memberId
@@ -551,7 +568,7 @@ function App() {
               phone: String(formData.get('phone') ?? member.phone),
               level: String(formData.get('level') ?? member.level),
               status: String(formData.get('status') ?? member.status) as MemberStatus,
-              classIds: classId ? [classId] : [],
+              classIds,
               passType: String(formData.get('passType') ?? member.passType),
               remainingCredits: Number(
                 formData.get('remainingCredits') ?? member.remainingCredits,
@@ -1083,6 +1100,16 @@ function HomeView({
                 <strong>{member.name}</strong>
                 <span>회비 미납 · {member.passType}</span>
               </div>
+              <a
+                className="smsButton"
+                href={smsHref(
+                  member.phone,
+                  `${member.name}님 안녕하세요~ 라인댄스 수강료 결제일이 지나서 안내드려요. 확인 부탁드립니다 :)`,
+                )}
+                aria-label={`${member.name} 문자`}
+              >
+                <MessageCircle size={17} />
+              </a>
               <a className="callButton" href={`tel:${member.phone}`} aria-label={`${member.name} 전화`}>
                 <PhoneCall size={17} />
               </a>
@@ -1097,6 +1124,16 @@ function HomeView({
                   잔여 {member.remainingCredits}/{member.totalCredits}회 · 재결제 안내 필요
                 </span>
               </div>
+              <a
+                className="smsButton"
+                href={smsHref(
+                  member.phone,
+                  `${member.name}님 안녕하세요~ 수강권이 ${member.remainingCredits}회 남아서 재등록 안내드려요. 계속 함께해요 :)`,
+                )}
+                aria-label={`${member.name} 문자`}
+              >
+                <MessageCircle size={17} />
+              </a>
               <a className="callButton" href={`tel:${member.phone}`} aria-label={`${member.name} 전화`}>
                 <PhoneCall size={17} />
               </a>
@@ -1109,6 +1146,16 @@ function HomeView({
                 <strong>{member.name}</strong>
                 <span>다음 결제 {member.nextPaymentDue || member.passUntil}</span>
               </div>
+              <a
+                className="smsButton"
+                href={smsHref(
+                  member.phone,
+                  `${member.name}님 안녕하세요~ 다음 결제일(${member.nextPaymentDue || member.passUntil})이 다가와서 미리 안내드려요 :)`,
+                )}
+                aria-label={`${member.name} 문자`}
+              >
+                <MessageCircle size={17} />
+              </a>
               <a className="callButton" href={`tel:${member.phone}`} aria-label={`${member.name} 전화`}>
                 <PhoneCall size={17} />
               </a>
@@ -1666,9 +1713,6 @@ function MembersView({
         <h2>회원 목록</h2>
         <div className="listStack">
           {filtered.map((member) => {
-            const primaryClass = classes.find((danceClass) =>
-              member.classIds.includes(danceClass.id),
-            )
             const dueDays = daysUntil(member.nextPaymentDue || member.passUntil)
             const attendanceSummary = Object.entries(attendance).reduce(
               (summary, [key, status]) => {
@@ -1687,6 +1731,10 @@ function MembersView({
               if (date > lastPresent) lastPresent = date
             }
             const isEditing = editingMemberId === member.id
+            const payStatus = paymentStatusOf(member)
+            const assignedClasses = classes.filter((danceClass) =>
+              member.classIds.includes(danceClass.id),
+            )
             return (
               <article className="memberCard memberLookupCard" key={member.id}>
                 <div className="memberLookupSummary">
@@ -1703,14 +1751,18 @@ function MembersView({
                         {memberStatusLabel(member.status)} 회원
                       </b>
                       {member.status === 'active' && (
-                        <b className={`memberBadge pay ${member.paymentStatus}`}>
-                          {paymentLabel(member.paymentStatus)}
+                        <b className={`memberBadge pay ${payStatus}`}>
+                          {paymentLabel(payStatus)}
                         </b>
                       )}
                     </div>
                   </div>
                   <div className="passBlock">
-                    <strong>{primaryClass?.name ?? member.interest ?? '수업 미지정'}</strong>
+                    <strong>
+                      {assignedClasses.length
+                        ? assignedClasses.map((danceClass) => danceClass.name).join(' · ')
+                        : member.interest ?? '수업 미지정'}
+                    </strong>
                     <span>
                       {member.passType} · {member.lastPaidAt || todayKey} ~ {member.passUntil || '-'}
                     </span>
@@ -1783,24 +1835,31 @@ function MembersView({
                   <Field label="전화번호">
                     <input name="phone" type="tel" defaultValue={member.phone} />
                   </Field>
-                  <div className="split">
-                    <Field label="구분">
-                      <select name="status" defaultValue={member.status}>
-                        <option value="active">등록한 사람</option>
-                        <option value="prospect">상담만 한 사람</option>
-                        <option value="waitlist">현재 대기</option>
-                      </select>
-                    </Field>
-                    <Field label="배정 수업">
-                      <select name="classId" defaultValue={member.classIds[0] ?? ''}>
-                        <option value="">수업 미지정</option>
-                        {classes.map((danceClass) => (
-                          <option value={danceClass.id} key={danceClass.id}>
-                            {danceClass.name}
-                          </option>
-                        ))}
-                      </select>
-                    </Field>
+                  <Field label="구분">
+                    <select name="status" defaultValue={member.status}>
+                      <option value="active">등록한 사람</option>
+                      <option value="prospect">상담만 한 사람</option>
+                      <option value="waitlist">현재 대기</option>
+                    </select>
+                  </Field>
+                  <div className="field">
+                    <span>배정 수업 (여러 개 선택 가능)</span>
+                    <div className="classPicker">
+                      {classes.map((danceClass) => (
+                        <label key={danceClass.id}>
+                          <input
+                            type="checkbox"
+                            name="classIds"
+                            value={danceClass.id}
+                            defaultChecked={member.classIds.includes(danceClass.id)}
+                          />
+                          <span>
+                            {danceClass.name} · {weekdays[danceClass.weekday]} {danceClass.startTime}
+                          </span>
+                        </label>
+                      ))}
+                      {!classes.length && <p className="emptyText">만든 수업이 없습니다.</p>}
+                    </div>
                   </div>
                   <div className="split">
                     <Field label="레벨">
@@ -2228,9 +2287,9 @@ function PaymentsView({
 }) {
   const [statusFilter, setStatusFilter] = useState<PaymentStatus | 'all'>('all')
   const counts = {
-    paid: members.filter((member) => member.paymentStatus === 'paid').length,
-    soon: members.filter((member) => member.paymentStatus === 'soon').length,
-    unpaid: members.filter((member) => member.paymentStatus === 'unpaid').length,
+    paid: members.filter((member) => paymentStatusOf(member) === 'paid').length,
+    soon: members.filter((member) => paymentStatusOf(member) === 'soon').length,
+    unpaid: members.filter((member) => paymentStatusOf(member) === 'unpaid').length,
   }
   const monthKey = todayKey.slice(0, 7)
   const allPayments = members
@@ -2244,7 +2303,7 @@ function PaymentsView({
   const visibleMembers =
     statusFilter === 'all'
       ? members
-      : members.filter((member) => member.paymentStatus === statusFilter)
+      : members.filter((member) => paymentStatusOf(member) === statusFilter)
   const filters: Array<{ label: string; value: PaymentStatus | 'all' }> = [
     { label: `전체 ${members.length}`, value: 'all' },
     { label: `완납 ${counts.paid}`, value: 'paid' },
@@ -2262,6 +2321,9 @@ function PaymentsView({
 
       <section className="panel">
         <h2>결제와 수강권</h2>
+        <p className="hint storageHint">
+          완납·임박·미납 상태는 다음 결제일과 잔여횟수 기준으로 자동 표시됩니다.
+        </p>
         <div className="paymentFilters" role="tablist" aria-label="결제 상태 필터">
           {filters.map((filter) => (
             <button
@@ -2276,17 +2338,18 @@ function PaymentsView({
         </div>
         <div className="listStack">
           {visibleMembers.map((member) => {
-            const className =
-              classes.find((danceClass) => member.classIds.includes(danceClass.id))?.name ??
-              '수업 미지정'
+            const assignedNames = classes
+              .filter((danceClass) => member.classIds.includes(danceClass.id))
+              .map((danceClass) => danceClass.name)
+            const payStatus = paymentStatusOf(member)
             return (
               <article className="paymentCard" key={member.id}>
                 <div className="paymentHead">
                   <div>
                     <strong>{member.name}</strong>
-                    <span>{className} · {member.passType}</span>
+                    <span>{assignedNames.length ? assignedNames.join(' · ') : '수업 미지정'} · {member.passType}</span>
                   </div>
-                  <b className={member.paymentStatus}>{paymentLabel(member.paymentStatus)}</b>
+                  <b className={payStatus}>{paymentLabel(payStatus)}</b>
                 </div>
                 <div className="paymentSummary">
                   <span>
@@ -2329,13 +2392,6 @@ function PaymentsView({
                       updatePayment(member.id, new FormData(event.currentTarget))
                     }}
                   >
-                    <Field label="결제 상태">
-                      <select name="paymentStatus" defaultValue={member.paymentStatus}>
-                        <option value="paid">완납</option>
-                        <option value="soon">만료 임박</option>
-                        <option value="unpaid">미납</option>
-                      </select>
-                    </Field>
                     <Field label="결제 유형">
                       <select name="passType" defaultValue={member.passType}>
                         <option>월회비</option>

@@ -59,10 +59,12 @@ test('instructor can manage classes, members, attendance, and payment details', 
   const statRow = page.locator('.memberStatRow').filter({ hasText: '최하은' })
   await expect(statRow.locator('.statChips .ok')).toHaveText('출석 1')
 
+  // 다음 결제일이 지나면 자동으로 미납 표시
   await page.getByRole('button', { name: '결제' }).click()
   const paymentCard = page.locator('.paymentCard').filter({ hasText: '최하은' })
   await paymentCard.locator('details.paymentEditor summary').click()
-  await paymentCard.getByRole('combobox').first().selectOption('unpaid')
+  await paymentCard.locator('input[name="nextPaymentDue"]').fill('2026-01-01')
+  await paymentCard.locator('input[name="passUntil"]').fill('2026-01-01')
   await paymentCard.getByRole('button', { name: '저장' }).click()
   await expect(paymentCard.locator('b.unpaid')).toHaveText('미납')
 

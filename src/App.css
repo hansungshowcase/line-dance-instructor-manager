@@ -379,6 +379,58 @@
   transform: scale(0.92);
 }
 
+.smsButton {
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--line-strong);
+  background: white;
+  color: var(--primary);
+  transition: transform 0.15s ease;
+}
+
+.smsButton:active {
+  transform: scale(0.92);
+}
+
+.classPicker {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.classPicker label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: white;
+  padding: 11px 12px;
+  cursor: pointer;
+}
+
+.classPicker input {
+  width: 20px;
+  min-height: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--primary);
+}
+
+.classPicker label span {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.classPicker label:has(input:checked) {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
 /* ---------- 시간표 ---------- */
 
 .schedulePanel {
