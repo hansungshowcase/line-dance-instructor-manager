@@ -88,6 +88,8 @@ test('instructor can manage classes, members, attendance, and payment details', 
   // 다음 결제일이 지나면 자동으로 미납 표시
   await page.getByRole('button', { name: '결제', exact: true }).click()
   const paymentCard = page.locator('.paymentCard').filter({ hasText: '최하은' })
+  // 수강권 상세는 접혀 있으므로 먼저 펼친다
+  await paymentCard.locator('details.enrollPayBlock summary').first().click()
   await paymentCard.getByRole('button', { name: '결제 정보 수정' }).click()
   await paymentCard.locator('input[name="nextPaymentDue"]').fill('2026-01-01')
   await paymentCard.getByRole('button', { name: '저장' }).click()

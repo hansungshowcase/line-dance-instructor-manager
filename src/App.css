@@ -1729,7 +1729,50 @@ button {
   flex-direction: column;
   gap: 10px;
   border-top: 1px solid var(--line);
-  padding-top: 12px;
+  padding-top: 4px;
+}
+
+/* 결제 카드의 수강권 상세는 눌러야 펼쳐진다 — 닫힌 줄은 핵심 요약 한 줄 */
+.enrollPaySummary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.enrollPaySummary::-webkit-details-marker {
+  display: none;
+}
+
+.enrollPaySummary .enrollTitle {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--sub);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.enrollPaySummary small {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.enrollPaySummary .enrollChevron {
+  flex: 0 0 auto;
+  color: var(--muted);
+  transition: transform 0.15s ease;
+}
+
+.enrollPayBlock[open] > .enrollPaySummary .enrollChevron {
+  transform: rotate(90deg);
 }
 
 .statPassLines {

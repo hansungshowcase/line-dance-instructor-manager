@@ -4341,11 +4341,24 @@ function PaymentsView({
                     0,
                   )
                   return (
-                    <div className="enrollPayBlock" key={enrollment.id}>
-                      <div className="labelRow">
+                    <details className="enrollPayBlock" key={enrollment.id}>
+                      {/* 닫힌 상태에서는 핵심(수강권명·잔여/디데이·상태)만 한 줄로 */}
+                      <summary className="enrollPaySummary">
                         <span className="enrollTitle">{enrollment.passName}</span>
+                        <small>
+                          {enrollment.totalCredits > 0
+                            ? enrollment.remainingCredits < 0
+                              ? `${-enrollment.remainingCredits}회 초과`
+                              : `잔여 ${enrollment.remainingCredits}회`
+                            : dueDays === null
+                              ? ''
+                              : dueDays < 0
+                                ? `${Math.abs(dueDays)}일 지남`
+                                : `D-${dueDays}`}
+                        </small>
                         <b className={`enrollStatus es-${status}`}>{paymentLabel(status)}</b>
-                      </div>
+                        <ChevronRight size={14} className="enrollChevron" />
+                      </summary>
                       {status === 'unpaid' && (
                         <p className="dueNotice">
                           받아야 할 회비 <b>{formatCurrency(enrollment.paidAmount)}</b>
@@ -4427,6 +4440,7 @@ function PaymentsView({
                                 new FormData(event.currentTarget),
                               )
                             }}
+                            key={enrollment.id}
                           >
                             <Field label="총 횟수">
                               <input
@@ -4469,7 +4483,7 @@ function PaymentsView({
                           </form>
                         )}
                       </div>
-                    </div>
+                    </details>
                   )
                 })}
                 {!member.enrollments.length && (
