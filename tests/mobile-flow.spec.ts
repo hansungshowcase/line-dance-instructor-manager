@@ -23,7 +23,7 @@ test('instructor can manage classes, members, attendance, and payment details', 
   // 수강권 편집에서 수강료를 바꾸면 연결된 수업에 바로 반영된다
   await page.getByRole('button', { name: '회원', exact: true }).click()
   const manageDrawer = page.locator('details.formDrawer').filter({ hasText: '만든 수강권 관리' })
-  await manageDrawer.locator('summary').first().click()
+  await page.getByRole('button', { name: '수강권 관리', exact: true }).click()
   const passEditor = manageDrawer
     .locator('details.classEditor')
     .filter({ hasText: '초급 라인댄스 월수강권' })
@@ -35,7 +35,7 @@ test('instructor can manage classes, members, attendance, and payment details', 
 
   await page.getByRole('button', { name: '회원', exact: true }).click()
   const memberDrawer = page.locator('details.formDrawer').filter({ hasText: '등록 회원 추가' })
-  await memberDrawer.locator('summary').click()
+  await page.getByRole('button', { name: '회원 등록', exact: true }).click()
   await page.getByPlaceholder('회원 이름').fill('최하은')
   await memberDrawer.getByPlaceholder('010-0000-0000').fill('010-5555-1212')
   // 수강권을 고르면 수업이 자동 배정된다
@@ -46,13 +46,13 @@ test('instructor can manage classes, members, attendance, and payment details', 
 
   // 새 수강권을 만들면 등록 회원 추가 폼의 수강권 목록에 즉시 반영되어야 한다
   const passDrawer = page.locator('details.formDrawer').filter({ hasText: '수강권 만들기' })
-  await passDrawer.locator('summary').first().click()
+  await page.getByRole('button', { name: '수강권 만들기', exact: true }).click()
   await passDrawer.locator('input[name="name"]').fill('야간 라틴 8회')
   await passDrawer.getByRole('button', { name: '수강권 저장' }).click()
   await expect(
     memberDrawer.locator('select[name="passTemplateId"] option', { hasText: '야간 라틴 8회' }),
   ).toHaveCount(1)
-  await passDrawer.locator('summary').click()
+  await page.getByRole('button', { name: '수강권 만들기', exact: true }).click()
   // 카드를 탭하면 상세가 펼쳐진다
   await page
     .locator('.memberLookupCard')
@@ -147,7 +147,7 @@ test('deleting a pass removes its classes from the timetable and pickers', async
   // 만든 수강권 관리에서 초급 수강권 삭제
   await page.getByRole('button', { name: '회원', exact: true }).click()
   const manageDrawer = page.locator('details.formDrawer').filter({ hasText: '만든 수강권 관리' })
-  await manageDrawer.locator('summary').first().click()
+  await page.getByRole('button', { name: '수강권 관리', exact: true }).click()
   const passEditor = manageDrawer
     .locator('details.classEditor')
     .filter({ hasText: '초급 라인댄스 월수강권' })

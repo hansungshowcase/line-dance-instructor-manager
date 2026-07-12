@@ -296,6 +296,21 @@ function isPrivateClass(danceClass: DanceClass) {
   return danceClass.location === '개인레슨' || danceClass.name.includes('개인레슨')
 }
 
+// 회원 탭 도구 서랍(수강권 만들기·관리·회원 등록)은 한 번에 하나만 펼친다
+const memberToolDrawerIds = ['drawer-pass', 'drawer-pass-manage', 'drawer-member'] as const
+function toggleMemberTool(id: (typeof memberToolDrawerIds)[number]) {
+  for (const drawerId of memberToolDrawerIds) {
+    const drawer = document.getElementById(drawerId) as HTMLDetailsElement | null
+    if (!drawer) continue
+    if (drawerId === id) {
+      drawer.open = !drawer.open
+      if (drawer.open) drawer.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    } else {
+      drawer.open = false
+    }
+  }
+}
+
 // 수강권을 삭제한 뒤 시간표에 남은 흔적 수업을 걷어낸다.
 // 같은 이름의 수강권이 없고 배정 회원도 없는 그룹 수업은 출석할 방법이 없는 죽은
 // 데이터다 (삭제 연동이 없던 예전 버전이 남긴 것). 로컬 로드·백업 복원·원격 수신
@@ -3210,7 +3225,26 @@ function MembersView({
         </div>
       </section>
 
+      {/* 수강권·회원 관리 도구: 세로로 쌓지 않고 가로 버튼 한 줄, 누른 것만 아래에 펼침 */}
+      <div className="memberToolsRow" role="group" aria-label="회원 관리 도구">
+        <button type="button" onClick={() => toggleMemberTool('drawer-pass')}>
+          수강권 만들기
+        </button>
+        <button
+          type="button"
+          disabled={passTemplates.length === 0}
+          onClick={() => toggleMemberTool('drawer-pass-manage')}
+        >
+          수강권 관리
+        </button>
+        <button type="button" onClick={() => toggleMemberTool('drawer-member')}>
+          회원 등록
+        </button>
+      </div>
+
       <FormDrawer
+        id="drawer-pass"
+        className="toolDrawer"
         title="수강권 만들기"
         hint="라인댄스 단체반 / 라틴댄스 단체반 / 개인레슨으로 세분화"
         action={onAddPassTemplate}
@@ -3294,7 +3328,7 @@ function MembersView({
       </FormDrawer>
 
       {passTemplates.length > 0 && (
-        <details className="formDrawer">
+        <details className="formDrawer toolDrawer" id="drawer-pass-manage">
           <summary>
             <span>
               <strong>만든 수강권 관리</strong>
@@ -3410,6 +3444,7 @@ function MembersView({
 
       <FormDrawer
         id="drawer-member"
+        className="toolDrawer"
         title="등록 회원 추가"
         hint="이름·전화번호와 수강권만 고르면 끝 — 금액·기간은 자동"
         action={onAddMember}
@@ -4475,6 +4510,7 @@ function SmsTemplateEditor({
 function FormDrawer({
   action,
   children,
+  className,
   hint,
   id,
   submitLabel = '추가',
@@ -4482,13 +4518,14 @@ function FormDrawer({
 }: {
   action: (formData: FormData) => void
   children: React.ReactNode
+  className?: string
   hint?: string
   id?: string
   submitLabel?: string
   title: string
 }) {
   return (
-    <details className="formDrawer" id={id}>
+    <details className={className ? `formDrawer ${className}` : 'formDrawer'} id={id}>
       <summary>
         <span>
           <strong>{title}</strong>

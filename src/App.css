@@ -1216,6 +1216,33 @@ button {
   margin: 14px 16px 0;
 }
 
+/* 도구 서랍은 가로 버튼 줄에서 누른 것만 펼쳐 보인다 */
+.memberDirectory > details.toolDrawer:not([open]) {
+  display: none;
+}
+
+.memberToolsRow {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 14px 16px 0;
+}
+
+.memberToolsRow button {
+  min-height: 46px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: white;
+  color: var(--ink);
+  padding: 6px 4px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.memberToolsRow button:disabled {
+  opacity: 0.45;
+}
+
 .memberDirectoryHero {
   padding: calc(28px + env(safe-area-inset-top)) 20px 54px;
   background: var(--grad);
