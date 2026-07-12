@@ -90,6 +90,8 @@ type Member = {
   note: string
   consultedAt?: string
   interest?: string
+  // 유입경로 (문자·전화·비즈니스 파트너 등)
+  source?: string
   enrollments: Enrollment[]
 }
 
@@ -597,6 +599,7 @@ type LegacyMember = {
   note?: string
   consultedAt?: string
   interest?: string
+  source?: string
   enrollments?: Enrollment[]
   classIds?: string[]
   passType?: string
@@ -618,6 +621,7 @@ function normalizeMember(raw: LegacyMember): Member {
     note: raw.note ?? '',
     consultedAt: raw.consultedAt,
     interest: raw.interest,
+    source: raw.source,
   }
   if (Array.isArray(raw.enrollments)) {
     return { ...base, enrollments: raw.enrollments }
@@ -1515,6 +1519,15 @@ function App() {
       notify('이름과 전화번호를 입력해 주세요')
       return
     }
+    // 관심 수업·유입경로: '기타'를 고르면 직접 입력한 값을 쓴다
+    const interestChoice = String(formData.get('interestChoice') ?? '')
+    const interest =
+      interestChoice === '기타'
+        ? String(formData.get('interestCustom') ?? '').trim()
+        : interestChoice
+    const sourceChoice = String(formData.get('sourceChoice') ?? '')
+    const source =
+      sourceChoice === '기타' ? String(formData.get('sourceCustom') ?? '').trim() : sourceChoice
     setMembers((current) => [
       {
         id: makeId('prospect'),
@@ -1523,7 +1536,8 @@ function App() {
         status: String(formData.get('status') ?? 'prospect') as MemberStatus,
         note: String(formData.get('note') ?? ''),
         consultedAt: String(formData.get('consultedAt') ?? todayKey),
-        interest: String(formData.get('interest') ?? ''),
+        interest,
+        source,
         enrollments: [],
       },
       ...current,
@@ -1996,8 +2010,10 @@ function App() {
       {tab === 'consultations' && (
         <ConsultationsView
           consultationMembers={consultationMembers}
+          passTemplates={passTemplates}
           onAddConsultation={addConsultation}
           onConvertMember={convertToMember}
+          onRemoveMember={removeMember}
           waitlistMembers={waitlistMembers}
         />
       )}
@@ -3891,20 +3907,69 @@ function AddEnrollmentRow({
   )
 }
 
+// '기타'를 고르면 직접 입력 칸이 나타나는 선택 상자
+function SelectWithCustom({
+  label,
+  name,
+  options,
+  placeholder,
+}: {
+  label: string
+  name: string
+  options: string[]
+  placeholder: string
+}) {
+  const [choice, setChoice] = useState('')
+  return (
+    <>
+      <Field label={label}>
+        <select
+          name={`${name}Choice`}
+          value={choice}
+          onChange={(event) => setChoice(event.target.value)}
+        >
+          <option value="">선택 안 함</option>
+          {options.map((option) => (
+            <option value={option} key={option}>
+              {option}
+            </option>
+          ))}
+          <option value="기타">기타 (직접 입력)</option>
+        </select>
+      </Field>
+      {choice === '기타' && (
+        <Field label={`${label} 직접 입력`}>
+          <input name={`${name}Custom`} placeholder={placeholder} autoFocus />
+        </Field>
+      )}
+    </>
+  )
+}
+
 function ConsultationsView({
   consultationMembers,
+  passTemplates,
   waitlistMembers,
   onAddConsultation,
   onConvertMember,
+  onRemoveMember,
 }: {
   consultationMembers: Member[]
+  passTemplates: PassTemplate[]
   waitlistMembers: Member[]
   onAddConsultation: (formData: FormData) => void
   onConvertMember: (memberId: string) => void
+  onRemoveMember: (memberId: string) => void
 }) {
-  const followUpMembers = [...consultationMembers, ...waitlistMembers].sort((a, b) =>
-    (b.consultedAt ?? '').localeCompare(a.consultedAt ?? ''),
-  )
+  const [query, setQuery] = useState('')
+  const followUpMembers = [...consultationMembers, ...waitlistMembers]
+    .sort((a, b) => (b.consultedAt ?? '').localeCompare(a.consultedAt ?? ''))
+    .filter((member) => {
+      if (!query) return true
+      const haystack =
+        `${member.name} ${member.phone} ${member.note} ${member.interest ?? ''} ${member.source ?? ''} ${member.consultedAt ?? ''}`.toLowerCase()
+      return haystack.includes(query.toLowerCase())
+    })
 
   return (
     <section className="screen">
@@ -3926,9 +3991,18 @@ function ConsultationsView({
             </select>
           </Field>
         </div>
-        <Field label="관심 수업">
-          <input name="interest" placeholder="예: 오전 초급반" />
-        </Field>
+        <SelectWithCustom
+          label="관심 수업"
+          name="interest"
+          options={passTemplates.map((pass) => pass.name)}
+          placeholder="예: 오전 초급반"
+        />
+        <SelectWithCustom
+          label="유입경로"
+          name="source"
+          options={['문자', '전화', '비즈니스 파트너']}
+          placeholder="예: 지인 소개"
+        />
         <Field label="상담 메모">
           <input name="note" placeholder="상담 내역 메모" />
         </Field>
@@ -3936,6 +4010,14 @@ function ConsultationsView({
 
       <section className="panel">
         <h2>상담 내역</h2>
+        <div className="searchBox consultSearchBox">
+          <Search size={16} />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="이름·전화·메모·관심수업·유입경로 검색"
+          />
+        </div>
         <div className="listStack">
           {followUpMembers.map((member) => (
             <article className="consultCard" key={member.id}>
@@ -3949,27 +4031,48 @@ function ConsultationsView({
                 <b className={`status-${member.status}`}>{memberStatusLabel(member.status)}</b>
               </div>
               <div className="consultBody">
-                <span>{member.consultedAt ?? '상담일 없음'} · {member.interest || '관심 수업 미정'}</span>
+                <span>
+                  {member.consultedAt ?? '상담일 없음'} · {member.interest || '관심 수업 미정'}
+                  {member.source && ` · ${member.source}`}
+                </span>
                 <p>{member.note || '상담 메모 없음'}</p>
               </div>
-              <button
-                type="button"
-                className="convertButton"
-                onClick={() => {
-                  if (
-                    window.confirm(
-                      `${member.name}님을 등록 회원으로 전환할까요? 전환 후 회원 탭에서 수강권을 추가해 주세요.`,
-                    )
-                  ) {
-                    onConvertMember(member.id)
-                  }
-                }}
-              >
-                등록 회원으로 전환
-              </button>
+              <div className="consultActions">
+                <button
+                  type="button"
+                  className="convertButton"
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        `${member.name}님을 등록 회원으로 전환할까요? 전환 후 회원 탭에서 수강권을 추가해 주세요.`,
+                      )
+                    ) {
+                      onConvertMember(member.id)
+                    }
+                  }}
+                >
+                  등록 회원으로 전환
+                </button>
+                <button
+                  type="button"
+                  className="consultDeleteButton"
+                  aria-label={`${member.name} 상담 삭제`}
+                  onClick={() => {
+                    if (window.confirm(`${member.name}님의 상담 내역을 삭제할까요?`)) {
+                      onRemoveMember(member.id)
+                    }
+                  }}
+                >
+                  삭제
+                </button>
+              </div>
             </article>
           ))}
-          {!followUpMembers.length && <p className="emptyText">등록된 상담 내역이 없습니다.</p>}
+          {!followUpMembers.length && (
+            <p className="emptyText">
+              {query ? '검색 결과가 없습니다.' : '등록된 상담 내역이 없습니다.'}
+            </p>
+          )}
         </div>
       </section>
     </section>

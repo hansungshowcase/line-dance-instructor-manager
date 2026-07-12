@@ -1300,6 +1300,37 @@ button {
   box-shadow: 0 14px 30px rgba(74, 99, 216, 0.28);
 }
 
+/* 상담 내역 검색 */
+.consultSearchBox {
+  min-height: 46px;
+  margin-bottom: 12px;
+  box-shadow: none;
+  background: var(--soft);
+  border-color: transparent;
+}
+
+.consultSearchBox svg {
+  color: var(--muted);
+}
+
+/* 상담 카드 하단: 전환 + 삭제 버튼 한 줄 */
+.consultActions {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.consultDeleteButton {
+  min-height: 44px;
+  border: 1px solid rgba(224, 73, 47, 0.3);
+  border-radius: var(--radius-md);
+  background: white;
+  color: var(--danger);
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .memberSearchBox svg {
   color: #aeb3c0;
 }
