@@ -1213,6 +1213,15 @@ function App() {
   const activeMembers = members.filter((member) => member.status === 'active')
   const consultationMembers = members.filter((member) => member.status === 'prospect')
   const waitlistMembers = members.filter((member) => member.status === 'waitlist')
+  // 그룹 수강권의 대기자(관심 수업 일치)가 정원을 채우면 개강 알림을 띄운다
+  const waitlistAlerts = passTemplates
+    .filter((pass) => pass.type !== 'private' && pass.capacity > 0)
+    .map((pass) => ({
+      capacity: pass.capacity,
+      count: waitlistMembers.filter((member) => member.interest === pass.name).length,
+      passName: pass.name,
+    }))
+    .filter((alert) => alert.count >= alert.capacity)
   const todayClasses = classesOnDate(classes, today)
 
   // 홈 알림은 수강권 단위로 만든다 (한 회원이 여러 건일 수 있음)
@@ -2125,6 +2134,7 @@ function App() {
           todayClasses={todayClasses}
           todayGigs={gigs.filter((gig) => gig.date === todayKey)}
           unpaidItems={unpaidItems}
+          waitlistAlerts={waitlistAlerts}
         />
       )}
       {tab === 'schedule' && (
@@ -2275,6 +2285,7 @@ function HomeView({
   todayClasses,
   todayGigs,
   unpaidItems,
+  waitlistAlerts,
 }: {
   backupAgeDays: number | null
   backupOverdue: boolean
@@ -2293,6 +2304,7 @@ function HomeView({
   todayClasses: DanceClass[]
   todayGigs: Gig[]
   unpaidItems: Array<{ member: Member; enrollment: Enrollment }>
+  waitlistAlerts: Array<{ capacity: number; count: number; passName: string }>
 }) {
   const now = new Date()
   const nowMinutes = now.getHours() * 60 + now.getMinutes()
@@ -2442,6 +2454,28 @@ function HomeView({
       <section className="panel">
         <h2>우선 확인</h2>
         <div className="listStack">
+          {/* 대기 정원이 찬 수업 — 개강 타이밍을 놓치지 않도록 맨 위에 알림 */}
+          {waitlistAlerts.map((alert) => (
+            <article className="taskRow danger" key={`wait-${alert.passName}`}>
+              <div className="taskAvatar">
+                <Users size={17} />
+              </div>
+              <div className="taskBody">
+                <strong>대기 정원 참 — 개강 가능!</strong>
+                <span>
+                  {alert.passName} · 대기 {alert.count}/{alert.capacity}명
+                </span>
+              </div>
+              <button
+                type="button"
+                className="callButton"
+                onClick={() => setTab('consultations')}
+                aria-label="대기 현황 보기"
+              >
+                <ChevronRight size={17} />
+              </button>
+            </article>
+          ))}
           {lowCreditItems.map(({ enrollment, member }) => (
             <article className="taskRow warn" key={enrollment.id}>
               <div className="taskAvatar">{member.name.slice(0, 1)}</div>
@@ -2502,9 +2536,10 @@ function HomeView({
               </button>
             </article>
           )}
-          {!expiringItems.length && !lowCreditItems.length && !backupOverdue && (
-            <p className="emptyText">확인할 항목이 없습니다.</p>
-          )}
+          {!expiringItems.length &&
+            !lowCreditItems.length &&
+            !backupOverdue &&
+            !waitlistAlerts.length && <p className="emptyText">확인할 항목이 없습니다.</p>}
         </div>
       </section>
 
@@ -2541,9 +2576,7 @@ function HomeView({
         </summary>
         <div className="drawerBody">
           <p className="hint ruleHint">
-            데이터는 이 기기에 저장돼요 (기기 동기화를 연결하면 연결된 기기에도 함께
-            저장돼요). 복원용 백업은 이 앱에 다시 불러올 수 있고, 엑셀 파일은 회원 명단을
-            공유하거나 컴퓨터에서 볼 때 사용해요.
+            복원용 백업 = 실수로 지웠을 때 되돌리는 보험. 엑셀 = 회원 명단 공유용.
           </p>
           <div className="split backupActions">
             <button type="button" className="secondaryButton" onClick={onExport}>
@@ -3570,10 +3603,7 @@ function MembersView({
           </div>
         )}
         {passFormType === 'private' && (
-          <p className="hint ruleHint">
-            개인레슨은 횟수·가격만 정하면 돼요. 실제 수업 일정은 시간표에서 실시간으로
-            추가합니다.
-          </p>
+          <p className="hint ruleHint">일정은 시간표에서 그때그때 추가해요.</p>
         )}
       </FormDrawer>
 
@@ -3720,7 +3750,7 @@ function MembersView({
             ))}
           </div>
         </div>
-        <Field label="수강권 (선택하면 수업·금액·기간이 자동 적용됩니다)">
+        <Field label="수강권 (수업·금액·기간 자동 적용)">
           <select name="passTemplateId" defaultValue="" key={passCategory}>
             <option value="">수강권 나중에 선택</option>
             {visiblePasses.map((pass) => (
@@ -4199,6 +4229,22 @@ function ConsultationsView({
   const [editingId, setEditingId] = useState<string | null>(null)
   const [convertingId, setConvertingId] = useState<string | null>(null)
   const [pickedPassId, setPickedPassId] = useState('')
+  // 대기자를 관심 수업(그룹 수강권)별로 묶는다 — 정원이 차면 개강 신호
+  const waitGroups = passTemplates
+    .filter((pass) => pass.type !== 'private')
+    .map((pass) => ({
+      capacity: pass.capacity,
+      key: pass.id,
+      label: pass.name,
+      waiting: waitlistMembers.filter((member) => member.interest === pass.name),
+    }))
+    .filter((group) => group.waiting.length > 0)
+  const etcWaiting = waitlistMembers.filter(
+    (member) =>
+      !passTemplates.some(
+        (pass) => pass.type !== 'private' && pass.name === member.interest,
+      ),
+  )
   const followUpMembers = [...consultationMembers, ...waitlistMembers]
     .sort((a, b) => (b.consultedAt ?? '').localeCompare(a.consultedAt ?? ''))
     .filter((member) => {
@@ -4239,6 +4285,53 @@ function ConsultationsView({
           <input name="note" placeholder="상담 내역 메모" />
         </Field>
       </FormDrawer>
+
+      {waitlistMembers.length > 0 && (
+        <section className="panel">
+          <h2>대기 현황</h2>
+          <div className="listStack">
+            {waitGroups.map((group) => {
+              const full = group.capacity > 0 && group.waiting.length >= group.capacity
+              const percent =
+                group.capacity > 0
+                  ? Math.min(100, Math.round((group.waiting.length / group.capacity) * 100))
+                  : 0
+              return (
+                <div className={full ? 'waitGroup full' : 'waitGroup'} key={group.key}>
+                  <div className="waitGroupHead">
+                    <strong>{group.label}</strong>
+                    <b>
+                      {group.waiting.length}/{group.capacity}명{full && ' · 정원 참!'}
+                    </b>
+                  </div>
+                  {group.capacity > 0 && (
+                    <div className="waitBar">
+                      <i style={{ width: `${percent}%` }} />
+                    </div>
+                  )}
+                  <small>{group.waiting.map((member) => member.name).join(' · ')}</small>
+                </div>
+              )
+            })}
+            {etcWaiting.length > 0 && (
+              <div className="waitGroup">
+                <div className="waitGroupHead">
+                  <strong>기타 대기</strong>
+                  <b>{etcWaiting.length}명</b>
+                </div>
+                <small>
+                  {etcWaiting
+                    .map((member) =>
+                      member.interest ? `${member.name} (${member.interest})` : member.name,
+                    )
+                    .join(' · ')}
+                </small>
+              </div>
+            )}
+          </div>
+          <p className="hint ruleHint">정원이 차면 홈 '우선 확인'에도 알림이 떠요.</p>
+        </section>
+      )}
 
       <section className="panel">
         <h2>상담 내역</h2>
@@ -4328,7 +4421,7 @@ function ConsultationsView({
 
               {convertingId === member.id && (
                 <div className="convertPanel">
-                  <Field label="적용할 수강권 (바로 등록하고 수업까지 자동 배정)">
+                  <Field label="적용할 수강권 (수업 자동 배정)">
                     <select
                       value={pickedPassId}
                       onChange={(event) => setPickedPassId(event.target.value)}
@@ -4509,9 +4602,7 @@ function AttendanceView({
           <span className="danger">결석 {summary.absent}</span>
           <span>미체크 {summary.unchecked}</span>
         </div>
-        <p className="hint ruleHint">
-          출석 체크 시 그 수업이 속한 회수권에서 1회 차감되고, 결석·미체크로 바꾸면 복구됩니다.
-        </p>
+        <p className="hint ruleHint">출석 체크 = 해당 수강권 1회 차감 (되돌리면 복구)</p>
       </section>
 
       <section className="panel">
@@ -4602,9 +4693,7 @@ function AttendanceView({
               {records.length > 0 && (
                 <details className="historyDetails">
                   <summary>날짜별 이력 보기 ({records.length}건)</summary>
-                  <p className="hint historyHint">
-                    항목을 누르면 그 날짜 출석부로 이동해서 수정할 수 있어요.
-                  </p>
+                  <p className="hint historyHint">누르면 그 날짜 출석부로 이동해요.</p>
                   <ul>
                     {records.slice(0, 12).map((record) => {
                       const recordClass = classes.find(
@@ -4740,9 +4829,7 @@ function PaymentsView({
 
       <section className="panel">
         <h2>결제와 수강권</h2>
-        <p className="hint storageHint">
-          완납·임박·미납 상태는 수강권별로 다음 결제일과 잔여횟수 기준 자동 표시됩니다.
-        </p>
+        <p className="hint storageHint">상태는 결제일·잔여횟수 기준 자동 표시</p>
         <div className="paymentFilters" role="tablist" aria-label="결제 상태 필터">
           {filters.map((filter) => (
             <button
