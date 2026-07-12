@@ -1748,19 +1748,16 @@ function App() {
     notify('스케줄이 삭제되었습니다')
   }
 
-  // 매주 반복으로 만든 외부 강의 전체 삭제 (같은 이름 + 같은 시작 시간 = 한 묶음)
+  // 매주 반복으로 만든 외부 강의 삭제 (같은 이름 + 같은 시작 시간 = 한 묶음).
+  // 선택한 날짜부터 이후 것만 지운다 — 지난 일정은 정산·수입 기록이라 남겨둔다.
   function removeGigSeries(gigId: string) {
     const target = gigs.find((gig) => gig.id === gigId)
     if (!target) return
-    const count = gigs.filter(
-      (gig) => gig.name === target.name && gig.startTime === target.startTime,
-    ).length
-    setGigs((current) =>
-      current.filter(
-        (gig) => !(gig.name === target.name && gig.startTime === target.startTime),
-      ),
-    )
-    notify(`반복 스케줄 ${count}개가 모두 삭제되었습니다`)
+    const inSeriesFromDate = (gig: Gig) =>
+      gig.name === target.name && gig.startTime === target.startTime && gig.date >= target.date
+    const count = gigs.filter(inSeriesFromDate).length
+    setGigs((current) => current.filter((gig) => !inSeriesFromDate(gig)))
+    notify(`반복 스케줄 ${count}개가 삭제되었습니다 (지난 일정은 유지)`)
   }
 
   function updateClassTime(classId: string, startTime: string) {
@@ -2698,7 +2695,9 @@ function ScheduleView({
                       seriesCount={
                         gigs.filter(
                           (item) =>
-                            item.name === gig.name && item.startTime === gig.startTime,
+                            item.name === gig.name &&
+                            item.startTime === gig.startTime &&
+                            item.date >= gig.date,
                         ).length
                       }
                       onRemoveGig={onRemoveGig}
@@ -2771,7 +2770,7 @@ function GigTimeCard({
         </button>
       ) : (
         <div className="gigDeleteChoice">
-          <p>매주 반복으로 등록된 스케줄이에요. 어떻게 삭제할까요?</p>
+          <p>매주 반복으로 등록된 스케줄이에요. 지난 일정은 정산 기록으로 남습니다.</p>
           <div className="choiceButtons">
             <button type="button" className="secondaryButton" onClick={() => onRemoveGig(gig.id)}>
               이 날짜만 삭제
@@ -2780,12 +2779,16 @@ function GigTimeCard({
               type="button"
               className="dangerButton"
               onClick={() => {
-                if (window.confirm(`'${gig.name}' 반복 스케줄 ${seriesCount}개를 모두 삭제할까요?`)) {
+                if (
+                  window.confirm(
+                    `'${gig.name}' ${gig.date}부터 이후 반복 ${seriesCount}개를 삭제할까요?\n(지난 일정은 남습니다)`,
+                  )
+                ) {
                   onRemoveGigSeries(gig.id)
                 }
               }}
             >
-              반복 전체 삭제 ({seriesCount}개)
+              이후 반복 삭제 ({seriesCount}개)
             </button>
           </div>
           <button type="button" className="draftCancel" onClick={() => setChoosing(false)}>
