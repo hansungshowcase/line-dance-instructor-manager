@@ -296,6 +296,44 @@ function isPrivateClass(danceClass: DanceClass) {
   return danceClass.location === '개인레슨' || danceClass.name.includes('개인레슨')
 }
 
+// 대한민국 공휴일 — 2026년은 대체공휴일 포함, 그 외 연도는 양력 고정 공휴일만
+const KR_HOLIDAYS_2026 = new Set([
+  '2026-01-01',
+  '2026-02-16',
+  '2026-02-17',
+  '2026-02-18',
+  '2026-03-01',
+  '2026-03-02',
+  '2026-05-05',
+  '2026-05-24',
+  '2026-05-25',
+  '2026-06-06',
+  '2026-08-15',
+  '2026-08-17',
+  '2026-09-24',
+  '2026-09-25',
+  '2026-09-26',
+  '2026-09-28',
+  '2026-10-03',
+  '2026-10-05',
+  '2026-10-09',
+  '2026-12-25',
+])
+const KR_FIXED_HOLIDAYS = new Set([
+  '01-01',
+  '03-01',
+  '05-05',
+  '06-06',
+  '08-15',
+  '10-03',
+  '10-09',
+  '12-25',
+])
+
+function isHoliday(dateKey: string) {
+  return KR_HOLIDAYS_2026.has(dateKey) || KR_FIXED_HOLIDAYS.has(dateKey.slice(5))
+}
+
 // 그 날짜에 열리는 수업: 매주 반복 수업 + 그 날짜 전용(1회성) 수업
 function classesOnDate(allClasses: DanceClass[], date: Date) {
   const dateKey = toDateKey(date)
@@ -1005,8 +1043,11 @@ function App() {
     ? activeMembers.filter((member) => {
         if (!memberClassIds(member).includes(selectedClass.id)) return false
         const enrollment = enrollmentForClass(member, selectedClass.id)
-        // 기간 만료·횟수 소진된 수강권의 회원은 출석 명단에 뜨지 않는다
-        return !enrollment || enrollmentStatus(enrollment) !== 'unpaid'
+        if (!enrollment) return true
+        // 기간 만료·횟수 소진, 또는 수강 시작 전(결제일 이전 날짜)에는 명단에 뜨지 않는다
+        if (enrollmentStatus(enrollment) === 'unpaid') return false
+        if (enrollment.lastPaidAt && attendanceDate < enrollment.lastPaidAt) return false
+        return true
       })
     : []
   const hasRealData = !isDemoMode && members.length > 0
@@ -1304,18 +1345,26 @@ function App() {
 
   function removePassTemplate(passId: string) {
     const pass = passTemplates.find((item) => item.id === passId)
-    const linkedClassIds = pass?.classIds ?? []
-    // 수강권을 지우면 연결된 수업도 시간표·회원 배정에서 함께 정리한다
-    if (linkedClassIds.length) {
+    if (!pass) return
+    // 수강권을 지우면 연결된 수업도 시간표·회원 배정에서 함께 정리한다.
+    // 예전 데이터에서 연결이 끊긴 경우를 대비해, 수강권과 이름이 같은 그룹 수업도 함께 지운다.
+    const removedIds = classes
+      .filter(
+        (danceClass) =>
+          pass.classIds.includes(danceClass.id) ||
+          (!isPrivateClass(danceClass) && danceClass.name === pass.name),
+      )
+      .map((danceClass) => danceClass.id)
+    if (removedIds.length) {
       setClasses((current) =>
-        current.filter((danceClass) => !linkedClassIds.includes(danceClass.id)),
+        current.filter((danceClass) => !removedIds.includes(danceClass.id)),
       )
       setMembers((current) =>
         current.map((member) => ({
           ...member,
           enrollments: member.enrollments.map((enrollment) => ({
             ...enrollment,
-            classIds: enrollment.classIds.filter((id) => !linkedClassIds.includes(id)),
+            classIds: enrollment.classIds.filter((id) => !removedIds.includes(id)),
           })),
         })),
       )
@@ -1531,20 +1580,45 @@ function App() {
     notify(`${timeFromMinutes(startMinutes)} 수업이 만들어졌습니다`)
   }
 
-  function addGig(date: string, startTime: string, name: string, fee: number) {
+  function addGig(
+    date: string,
+    startTime: string,
+    name: string,
+    fee: number,
+    repeatUntil?: string,
+    skipHolidays?: boolean,
+  ) {
     const startMinutes = minutesFromTime(startTime)
+    // 매주 반복: 시작 날짜부터 종료일까지 같은 요일로 생성 (공휴일 제외 옵션)
+    const dates: string[] = []
+    const [year, month, day] = date.split('-').map(Number)
+    const cursor = new Date(year, month - 1, day)
+    const limit = repeatUntil && repeatUntil > date ? repeatUntil : date
+    let guard = 0
+    while (toDateKey(cursor) <= limit && guard < 60) {
+      const key = toDateKey(cursor)
+      if (!(skipHolidays && isHoliday(key))) dates.push(key)
+      cursor.setDate(cursor.getDate() + 7)
+      guard += 1
+    }
+    if (!dates.length) {
+      notify('추가할 날짜가 없어요 (공휴일 제외 조건 확인)')
+      return
+    }
     setGigs((current) => [
       ...current,
-      {
+      ...dates.map((dateKey) => ({
         id: makeId('gig'),
-        date,
+        date: dateKey,
         startTime: timeFromMinutes(startMinutes),
         endTime: timeFromMinutes(startMinutes + 50),
         name: name.trim() || '외부 강의',
         fee,
-      },
+      })),
     ])
-    notify('내 스케줄이 추가되었습니다')
+    notify(
+      dates.length > 1 ? `${dates.length}회 스케줄이 추가되었습니다` : '내 스케줄이 추가되었습니다',
+    )
   }
 
   function removeGig(gigId: string) {
@@ -2242,7 +2316,14 @@ function ScheduleView({
   classes: DanceClass[]
   gigs: Gig[]
   members: Member[]
-  onAddGig: (date: string, startTime: string, name: string, fee: number) => void
+  onAddGig: (
+    date: string,
+    startTime: string,
+    name: string,
+    fee: number,
+    repeatUntil?: string,
+    skipHolidays?: boolean,
+  ) => void
   onAssignMember: (memberId: string, classId: string) => void
   onCreateSlotClass: (dateKey: string, startTime: string, memberIds: string[]) => void
   onRemoveClass: (classId: string) => void
@@ -2289,12 +2370,13 @@ function ScheduleView({
               classesOnDate(classes, date).length +
               gigs.filter((gig) => gig.date === toDateKey(date)).length
             const isSelected = toDateKey(date) === selectedDateKey
+            const isRed = date.getDay() === 0 || isHoliday(toDateKey(date))
             return (
               <button
                 type="button"
                 className={`${toDateKey(date) === todayKey ? 'today' : ''} ${
                   isSelected ? 'selected' : ''
-                }`}
+                } ${isRed ? 'redday' : ''}`}
                 onClick={() => setSelectedDate(date)}
                 key={toDateKey(date)}
               >
@@ -2354,7 +2436,9 @@ function ScheduleView({
                   type="button"
                   className={`${date.getMonth() !== viewMonth.getMonth() ? 'outside' : ''} ${
                     dateKey === todayKey ? 'today' : ''
-                  } ${dateKey === selectedDateKey ? 'selected' : ''}`}
+                  } ${dateKey === selectedDateKey ? 'selected' : ''} ${
+                    date.getDay() === 0 || isHoliday(dateKey) ? 'redday' : ''
+                  }`}
                   onClick={() => {
                     setSelectedDate(date)
                     document
@@ -2446,8 +2530,9 @@ function ScheduleView({
             }
           />
           <QuickAddGig
-            onCreate={(startTime, name, fee) =>
-              onAddGig(selectedDateKey, startTime, name, fee)
+            baseDateKey={selectedDateKey}
+            onCreate={(startTime, name, fee, repeatUntil, skipHolidays) =>
+              onAddGig(selectedDateKey, startTime, name, fee, repeatUntil, skipHolidays)
             }
           />
         </div>
@@ -2483,12 +2568,15 @@ function TimeClassCard({
   const [draft, setDraft] = useState<Record<string, AttendanceStatus>>({})
   const [searchTerm, setSearchTerm] = useState('')
   const [timeValue, setTimeValue] = useState(danceClass.startTime)
-  // 기간 만료·횟수 소진(미납 판정) 수강권의 회원은 출석 명단에 뜨지 않는다
+  // 기간 만료·횟수 소진, 또는 수강 시작 전(결제일 이전 날짜)의 회원은 명단에 뜨지 않는다
   const assignedMembers = members.filter((member) => {
     if (member.status !== 'active') return false
     if (!memberClassIds(member).includes(danceClass.id)) return false
     const enrollment = enrollmentForClass(member, danceClass.id)
-    return !enrollment || enrollmentStatus(enrollment) !== 'unpaid'
+    if (!enrollment) return true
+    if (enrollmentStatus(enrollment) === 'unpaid') return false
+    if (enrollment.lastPaidAt && dateKey < enrollment.lastPaidAt) return false
+    return true
   })
   const candidates = members.filter(
     (member) => !memberClassIds(member).includes(danceClass.id),
@@ -2529,7 +2617,8 @@ function TimeClassCard({
         </small>
       </div>
 
-      {isPrivateClass(danceClass) && mode === 'idle' && (
+      {/* 모든 수업에서 시간 변경·삭제 가능 (수강권과 연결이 끊긴 수업도 여기서 정리) */}
+      {mode === 'idle' && (
         <div className="privateActions">
           <input
             type="time"
@@ -2548,7 +2637,11 @@ function TimeClassCard({
             type="button"
             className="timeDeleteButton"
             onClick={() => {
-              if (window.confirm(`'${danceClass.name}' 수업을 삭제할까요?`)) {
+              if (
+                window.confirm(
+                  `'${danceClass.name}' 수업을 시간표에서 삭제할까요?${isPrivateClass(danceClass) ? '' : ' (수강권은 유지됩니다)'}`,
+                )
+              ) {
                 onRemoveClass(danceClass.id)
               }
             }}
@@ -2773,14 +2866,25 @@ function QuickAddClass({
 }
 
 function QuickAddGig({
+  baseDateKey,
   onCreate,
 }: {
-  onCreate: (startTime: string, name: string, fee: number) => void
+  baseDateKey: string
+  onCreate: (
+    startTime: string,
+    name: string,
+    fee: number,
+    repeatUntil?: string,
+    skipHolidays?: boolean,
+  ) => void
 }) {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
   const [startTime, setStartTime] = useState('14:00')
   const [fee, setFee] = useState('60000')
+  const [repeatWeekly, setRepeatWeekly] = useState(false)
+  const [repeatUntil, setRepeatUntil] = useState(addMonthsFrom(baseDateKey, 2))
+  const [skipHolidays, setSkipHolidays] = useState(true)
 
   if (!open) {
     return (
@@ -2817,6 +2921,34 @@ function QuickAddGig({
             />
           </Field>
         </div>
+        <label className="checkRow">
+          <input
+            type="checkbox"
+            checked={repeatWeekly}
+            onChange={(event) => setRepeatWeekly(event.target.checked)}
+          />
+          <span>매주 같은 요일에 반복</span>
+        </label>
+        {repeatWeekly && (
+          <>
+            <Field label="반복 종료일 (이 날짜까지 매주)">
+              <input
+                type="date"
+                value={repeatUntil}
+                min={baseDateKey}
+                onChange={(event) => setRepeatUntil(event.target.value)}
+              />
+            </Field>
+            <label className="checkRow">
+              <input
+                type="checkbox"
+                checked={skipHolidays}
+                onChange={(event) => setSkipHolidays(event.target.checked)}
+              />
+              <span>빨간날(공휴일)은 건너뛰기</span>
+            </label>
+          </>
+        )}
         <div className="draftFoot">
           <button type="button" className="draftCancel" onClick={() => setOpen(false)}>
             취소
@@ -2825,12 +2957,18 @@ function QuickAddGig({
             type="button"
             className="draftConfirm"
             onClick={() => {
-              onCreate(startTime, name, Number(fee) || 0)
+              onCreate(
+                startTime,
+                name,
+                Number(fee) || 0,
+                repeatWeekly ? repeatUntil : undefined,
+                repeatWeekly ? skipHolidays : false,
+              )
               setOpen(false)
               setName('')
             }}
           >
-            스케줄 추가
+            {repeatWeekly ? '매주 반복으로 추가' : '스케줄 추가'}
           </button>
         </div>
       </div>
@@ -2877,6 +3015,9 @@ function MembersView({
   const [openMemberId, setOpenMemberId] = useState<string | null>(convertedMemberId)
   const [quickFilter, setQuickFilter] = useState<'all' | 'unpaid' | 'soon' | 'low'>('all')
   const [passFormType, setPassFormType] = useState<LessonType>('line_group')
+  // 시작 시간을 고르면 종료 시간은 자동으로 1시간 뒤 (직접 수정 가능)
+  const [passStart, setPassStart] = useState('10:00')
+  const [passEnd, setPassEnd] = useState('11:00')
   const [passCategory, setPassCategory] = useState<LessonType | 'all'>('all')
   const passCategories: Array<{ label: string; value: LessonType | 'all' }> = [
     { label: '전체', value: 'all' },
@@ -2984,10 +3125,23 @@ function MembersView({
           <>
             <div className="split">
               <Field label="시작 시간">
-                <input name="startTime" type="time" defaultValue="10:00" />
+                <input
+                  name="startTime"
+                  type="time"
+                  value={passStart}
+                  onChange={(event) => {
+                    setPassStart(event.target.value)
+                    setPassEnd(timeFromMinutes(minutesFromTime(event.target.value) + 60))
+                  }}
+                />
               </Field>
-              <Field label="종료 시간">
-                <input name="endTime" type="time" defaultValue="10:50" />
+              <Field label="종료 시간 (자동 +1시간, 수정 가능)">
+                <input
+                  name="endTime"
+                  type="time"
+                  value={passEnd}
+                  onChange={(event) => setPassEnd(event.target.value)}
+                />
               </Field>
             </div>
             <div className="field">
@@ -3463,31 +3617,60 @@ function AddEnrollmentRow({
   passTemplates: PassTemplate[]
 }) {
   const [pickedPassId, setPickedPassId] = useState('')
+  const [category, setCategory] = useState<LessonType | 'all'>('all')
+  const categories: Array<{ label: string; value: LessonType | 'all' }> = [
+    { label: '전체', value: 'all' },
+    { label: '라인댄스', value: 'line_group' },
+    { label: '라틴댄스', value: 'latin_group' },
+    { label: '개인레슨', value: 'private' },
+  ]
+  const visiblePasses =
+    category === 'all' ? passTemplates : passTemplates.filter((pass) => pass.type === category)
   return (
-    <div className="addEnrollRow">
-      <select
-        value={pickedPassId}
-        onChange={(event) => setPickedPassId(event.target.value)}
-        aria-label="추가할 수강권"
-      >
-        <option value="">+ 수강권 추가…</option>
-        {passTemplates.map((pass) => (
-          <option value={pass.id} key={pass.id}>
-            {pass.name}
-          </option>
+    <div className="addEnrollArea">
+      <div className="labelRow">
+        <span className="enrollTitle">+ 수강권 추가</span>
+      </div>
+      <div className="paymentFilters categoryChips" role="tablist" aria-label="수강권 종류">
+        {categories.map((item) => (
+          <button
+            type="button"
+            className={category === item.value ? 'active' : ''}
+            onClick={() => {
+              setCategory(item.value)
+              setPickedPassId('')
+            }}
+            key={item.value}
+          >
+            {item.label}
+          </button>
         ))}
-      </select>
-      <button
-        type="button"
-        disabled={!pickedPassId}
-        onClick={() => {
-          if (!pickedPassId) return
-          onAdd(pickedPassId)
-          setPickedPassId('')
-        }}
-      >
-        추가
-      </button>
+      </div>
+      <div className="addEnrollRow">
+        <select
+          value={pickedPassId}
+          onChange={(event) => setPickedPassId(event.target.value)}
+          aria-label="추가할 수강권"
+        >
+          <option value="">수강권 선택…</option>
+          {visiblePasses.map((pass) => (
+            <option value={pass.id} key={pass.id}>
+              {pass.name}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          disabled={!pickedPassId}
+          onClick={() => {
+            if (!pickedPassId) return
+            onAdd(pickedPassId)
+            setPickedPassId('')
+          }}
+        >
+          추가
+        </button>
+      </div>
     </div>
   )
 }

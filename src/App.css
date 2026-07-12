@@ -3079,3 +3079,61 @@ button {
     justify-content: center;
   }
 }
+
+/* ---------- 빨간날(일요일·공휴일) ---------- */
+
+.dayStrip .redday strong {
+  color: var(--danger);
+}
+
+.dayStrip .selected strong {
+  color: white;
+}
+
+.monthGrid .redday b {
+  color: var(--danger);
+}
+
+.monthGrid .outside.redday b {
+  color: rgba(224, 73, 47, 0.35);
+}
+
+.monthGrid .today b {
+  background: var(--primary);
+  color: white;
+}
+
+/* ---------- 체크박스 행 ---------- */
+
+.checkRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 2px;
+  cursor: pointer;
+}
+
+.checkRow input {
+  width: 20px;
+  height: 20px;
+  min-height: 20px;
+  margin: 0;
+  accent-color: var(--primary);
+}
+
+.checkRow span {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* ---------- 수강권 추가 영역(회원 카드) ---------- */
+
+.addEnrollArea {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-md);
+  padding: 12px;
+}
