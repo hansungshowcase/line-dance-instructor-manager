@@ -281,6 +281,20 @@ button.rowItem:active {
   color: #8a5b00;
 }
 
+.homeToolsToggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 44px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .rowTime b {
   font-size: 14px;
   font-weight: 700;
@@ -1395,7 +1409,7 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  min-height: 32px;
+  min-height: 40px;
   margin-top: 1px;
   padding-block: 4px;
   color: var(--sub);
@@ -1762,7 +1776,7 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  min-height: 32px;
+  min-height: 40px;
   margin-top: 1px;
   padding-block: 4px;
   color: var(--sub);
@@ -2226,9 +2240,21 @@ button {
 }
 
 .privateActions input {
+  min-width: 92px;
   min-height: 44px;
   padding: 9px 11px;
   font-size: 15px;
+}
+
+/* 아주 좁은 화면: 시간 입력이 짓눌리지 않게 두 줄로 배치 */
+@media (max-width: 349px) {
+  .privateActions {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .privateActions input {
+    grid-column: 1 / -1;
+  }
 }
 
 .privateActions .timeSaveButton {

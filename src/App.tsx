@@ -2014,6 +2014,8 @@ function HomeView({
 }) {
   const now = new Date()
   const nowMinutes = now.getHours() * 60 + now.getMinutes()
+  // 홈은 최대한 깔끔하게: 백업·동기화·문자 템플릿은 '설정'을 눌러야 보인다
+  const [showTools, setShowTools] = useState(false)
   const sortedToday = [...todayClasses].sort((a, b) => a.startTime.localeCompare(b.startTime))
   // 회원 수업 + 내 스케줄(외부 강의)을 합쳐서 오늘 일정으로 본다
   const todayItems: Array<
@@ -2224,6 +2226,13 @@ function HomeView({
         </div>
       </section>
 
+      {!showTools && (
+        <button type="button" className="homeToolsToggle" onClick={() => setShowTools(true)}>
+          <Settings2 size={14} /> 설정 (백업 · 동기화 · 문자 템플릿)
+        </button>
+      )}
+
+      <div hidden={!showTools}>
       <FormDrawer
         key={smsTemplates.unpaid + smsTemplates.lowCredit + smsTemplates.expiring}
         title="문자 템플릿"
@@ -2278,6 +2287,7 @@ function HomeView({
       </details>
 
       <SyncDrawer sync={sync} onCopy={onCopyText} />
+      </div>
     </section>
   )
 }
