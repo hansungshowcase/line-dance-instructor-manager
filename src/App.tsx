@@ -296,6 +296,28 @@ function isPrivateClass(danceClass: DanceClass) {
   return danceClass.location === '개인레슨' || danceClass.name.includes('개인레슨')
 }
 
+// 수강권을 삭제한 뒤 시간표에 남은 흔적 수업을 걷어낸다.
+// 같은 이름의 수강권이 없고 배정 회원도 없는 그룹 수업은 출석할 방법이 없는 죽은
+// 데이터다 (삭제 연동이 없던 예전 버전이 남긴 것). 로컬 로드·백업 복원·원격 수신
+// 모든 경로에 적용해, 어떤 기기가 옛 데이터를 다시 올려도 결국 청소된 상태로 수렴한다.
+function sweepOrphanClasses(
+  classes: DanceClass[],
+  members: Member[],
+  passTemplates: PassTemplate[],
+): DanceClass[] {
+  const passNames = new Set(passTemplates.map((pass) => pass.name))
+  const assignedClassIds = new Set<string>()
+  for (const member of members)
+    for (const enrollment of member.enrollments)
+      for (const id of enrollment.classIds) assignedClassIds.add(id)
+  return classes.filter(
+    (danceClass) =>
+      isPrivateClass(danceClass) ||
+      passNames.has(danceClass.name) ||
+      assignedClassIds.has(danceClass.id),
+  )
+}
+
 // 대한민국 공휴일 — 2026년은 대체공휴일 포함, 그 외 연도는 양력 고정 공휴일만
 const KR_HOLIDAYS_2026 = new Set([
   '2026-01-01',
@@ -602,8 +624,10 @@ function useStoredData() {
           attendance?: AttendanceBook
           gigs?: Gig[]
         }
-        if (saved.members?.length) setMembers(saved.members.map(normalizeMember))
-        if (saved.classes?.length) setClasses(saved.classes)
+        const loadedMembers = (saved.members ?? []).map(normalizeMember)
+        if (loadedMembers.length) setMembers(loadedMembers)
+        if (saved.classes?.length)
+          setClasses(sweepOrphanClasses(saved.classes, loadedMembers, saved.passTemplates ?? []))
         if (saved.passTemplates?.length) setPassTemplates(saved.passTemplates)
         if (saved.attendance) setAttendance(saved.attendance)
         if (saved.gigs?.length) setGigs(saved.gigs)
@@ -788,11 +812,17 @@ function App() {
         }
         // syncJson과 같은 키 순서·같은 객체로 직렬화해 다음 렌더의 syncJson과 정확히
         // 일치시킨다 (어긋나면 방금 받은 데이터를 곧바로 되올리는 왕복이 생긴다)
+        // 흔적 수업 청소는 여기서도 적용 — 청소로 달라지면 한 차례 되올려 서버도 수렴시킨다
+        const remoteMembers = (parsed.members ?? []).map(normalizeMember)
         const next = {
           attendance: parsed.attendance ?? {},
-          classes: parsed.classes ?? [],
+          classes: sweepOrphanClasses(
+            parsed.classes ?? [],
+            remoteMembers,
+            parsed.passTemplates ?? [],
+          ),
           gigs: parsed.gigs ?? [],
-          members: (parsed.members ?? []).map(normalizeMember),
+          members: remoteMembers,
           passTemplates: parsed.passTemplates ?? [],
         }
         setMembers(next.members)
@@ -801,7 +831,9 @@ function App() {
         setAttendance(next.attendance)
         setGigs(next.gigs)
         clearPushTimer()
-        const serialized = JSON.stringify(next)
+        // 기준선은 '서버에 실제로 있던 값'으로 잡는다. 청소로 로컬이 달라졌다면
+        // 다음 렌더에서 편집으로 감지되어 청소된 데이터가 자동으로 서버에 올라간다.
+        const serialized = JSON.stringify({ ...next, classes: parsed.classes ?? [] })
         lastSyncedJsonRef.current = serialized
         editBaselineRef.current = serialized
         syncMetaRef.current = {
@@ -1795,8 +1827,10 @@ function App() {
           return
         }
         if (!window.confirm('현재 데이터를 백업 파일 내용으로 교체할까요?')) return
-        if (saved.members?.length) setMembers(saved.members.map(normalizeMember))
-        if (saved.classes?.length) setClasses(saved.classes)
+        const importedMembers = (saved.members ?? []).map(normalizeMember)
+        if (importedMembers.length) setMembers(importedMembers)
+        if (saved.classes?.length)
+          setClasses(sweepOrphanClasses(saved.classes, importedMembers, saved.passTemplates ?? []))
         if (saved.passTemplates?.length) setPassTemplates(saved.passTemplates)
         if (saved.attendance) setAttendance(saved.attendance)
         if (saved.gigs?.length) setGigs(saved.gigs)
