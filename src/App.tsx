@@ -2928,9 +2928,9 @@ function QuickAddGig({
   const [name, setName] = useState('')
   const [startTime, setStartTime] = useState('14:00')
   const [fee, setFee] = useState('60000')
-  const [repeatWeekly, setRepeatWeekly] = useState(false)
+  const [repeat, setRepeat] = useState<'none' | 'weekly' | 'weeklyNoHoliday'>('none')
   const [repeatUntil, setRepeatUntil] = useState(addMonthsFrom(baseDateKey, 2))
-  const [skipHolidays, setSkipHolidays] = useState(true)
+  const repeatWeekly = repeat !== 'none'
 
   if (!open) {
     return (
@@ -2967,33 +2967,38 @@ function QuickAddGig({
             />
           </Field>
         </div>
-        <label className="checkRow">
-          <input
-            type="checkbox"
-            checked={repeatWeekly}
-            onChange={(event) => setRepeatWeekly(event.target.checked)}
-          />
-          <span>매주 같은 요일에 반복</span>
-        </label>
+        <div className="field">
+          <span>반복</span>
+          <div className="paymentFilters categoryChips" role="tablist" aria-label="반복">
+            {(
+              [
+                { label: '안 함', value: 'none' },
+                { label: '매주', value: 'weekly' },
+                { label: '매주 · 빨간날 제외', value: 'weeklyNoHoliday' },
+              ] as const
+            ).map((option) => (
+              <button
+                type="button"
+                className={repeat === option.value ? 'active' : ''}
+                onClick={() => setRepeat(option.value)}
+                key={option.value}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
         {repeatWeekly && (
-          <>
-            <Field label="반복 종료일 (이 날짜까지 매주)">
-              <input
-                type="date"
-                value={repeatUntil}
-                min={baseDateKey}
-                onChange={(event) => setRepeatUntil(event.target.value)}
-              />
-            </Field>
-            <label className="checkRow">
-              <input
-                type="checkbox"
-                checked={skipHolidays}
-                onChange={(event) => setSkipHolidays(event.target.checked)}
-              />
-              <span>빨간날(공휴일)은 건너뛰기</span>
-            </label>
-          </>
+          <Field
+            label={`반복 종료일 (${Number(baseDateKey.slice(5, 7))}월 ${Number(baseDateKey.slice(8, 10))}일부터 이 날짜까지 매주)`}
+          >
+            <input
+              type="date"
+              value={repeatUntil}
+              min={baseDateKey}
+              onChange={(event) => setRepeatUntil(event.target.value)}
+            />
+          </Field>
         )}
         <div className="draftFoot">
           <button type="button" className="draftCancel" onClick={() => setOpen(false)}>
@@ -3008,7 +3013,7 @@ function QuickAddGig({
                 name,
                 Number(fee) || 0,
                 repeatWeekly ? repeatUntil : undefined,
-                repeatWeekly ? skipHolidays : false,
+                repeat === 'weeklyNoHoliday',
               )
               setOpen(false)
               setName('')
