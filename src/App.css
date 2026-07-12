@@ -1574,6 +1574,157 @@ button {
   font-weight: 700;
 }
 
+/* ---------- 수강권(Enrollment) 블록 ---------- */
+
+.enrollLines {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.enrollLine {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.enrollLine > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.enrollLine > b {
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.enrollTitle {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.enrollStatus {
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.enrollStatus.es-paid {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.enrollStatus.es-soon {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.enrollStatus.es-unpaid {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.enrollArea {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.enrollEditor {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: white;
+  padding: 13px;
+}
+
+.addEnrollRow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.addEnrollRow select {
+  min-height: 48px;
+}
+
+.addEnrollRow button {
+  min-height: 48px;
+  border-radius: var(--radius-sm);
+  background: var(--primary);
+  color: white;
+  padding: 0 18px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.addEnrollRow button:disabled {
+  background: var(--line-strong);
+  cursor: default;
+}
+
+.enrollPayBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.statPassLines {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.statPassLine {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  border-radius: var(--radius-sm);
+  background: var(--soft);
+  padding: 8px 11px;
+}
+
+.statPassLine > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--sub);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.statPassLine > b {
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.statNone {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.paymentLogRow strong small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
 .memberEditForm {
   border-top: 1px solid var(--line);
   padding: 16px;
