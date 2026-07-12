@@ -3152,8 +3152,20 @@ button {
   color: var(--danger);
 }
 
+.dayStrip .redday span {
+  color: var(--danger);
+  opacity: 0.8;
+}
+
 .dayStrip .selected strong {
   color: white;
+}
+
+/* 빨간날이 선택돼 있어도 빨간날임이 보이도록 밝은 붉은 글씨 유지 */
+.dayStrip .selected.redday strong,
+.dayStrip .selected.redday span {
+  color: #ffd9d0;
+  opacity: 1;
 }
 
 .monthGrid .redday b {

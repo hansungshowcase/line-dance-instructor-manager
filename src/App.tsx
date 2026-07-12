@@ -1108,6 +1108,9 @@ function App() {
   const classMembers = selectedClass
     ? activeMembers.filter((member) => {
         if (!memberClassIds(member).includes(selectedClass.id)) return false
+        // 그 날짜에 출석 기록이 이미 있으면 항상 보인다 — 지금 만료됐더라도
+        // 날짜별 이력과 명단이 어긋나면 안 되기 때문
+        if (attendance[attendanceKey(attendanceDate, selectedClass.id, member.id)]) return true
         const enrollment = enrollmentForClass(member, selectedClass.id)
         if (!enrollment) return true
         // 기간 만료·횟수 소진, 또는 수강 시작 전(결제일 이전 날짜)에는 명단에 뜨지 않는다
@@ -2678,10 +2681,12 @@ function TimeClassCard({
   // 시간 변경·삭제는 자주 쓰지 않으므로 톱니 버튼을 눌렀을 때만 펼친다 (카드 높이 절약)
   const [showEdit, setShowEdit] = useState(false)
   const [timeValue, setTimeValue] = useState(danceClass.startTime)
-  // 기간 만료·횟수 소진, 또는 수강 시작 전(결제일 이전 날짜)의 회원은 명단에 뜨지 않는다
+  // 기간 만료·횟수 소진, 또는 수강 시작 전(결제일 이전 날짜)의 회원은 명단에 뜨지 않는다.
+  // 단, 그 날짜에 출석 기록이 이미 있으면 항상 보인다 (날짜별 이력과 시간표 일치 보장)
   const assignedMembers = members.filter((member) => {
-    if (member.status !== 'active') return false
     if (!memberClassIds(member).includes(danceClass.id)) return false
+    if (attendance[attendanceKey(dateKey, danceClass.id, member.id)]) return true
+    if (member.status !== 'active') return false
     const enrollment = enrollmentForClass(member, danceClass.id)
     if (!enrollment) return true
     if (enrollmentStatus(enrollment) === 'unpaid') return false
