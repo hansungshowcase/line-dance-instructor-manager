@@ -315,6 +315,38 @@ function toggleMemberTool(id: (typeof memberToolDrawerIds)[number]) {
 // 같은 이름의 수강권이 없고 배정 회원도 없는 그룹 수업은 출석할 방법이 없는 죽은
 // 데이터다 (삭제 연동이 없던 예전 버전이 남긴 것). 로컬 로드·백업 복원·원격 수신
 // 모든 경로에 적용해, 어떤 기기가 옛 데이터를 다시 올려도 결국 청소된 상태로 수렴한다.
+// 한 수업이 같은 회원의 여러 수강권에 중복 소속되면 출석 차감이 먼저 걸리는
+// 수강권에서 일어나 잔여 횟수가 엉킨다. 수업 이름과 같은 이름의 수강권이 있으면
+// 그 수강권이 주인이고, 없으면 먼저 나온 수강권만 유지한다.
+function dedupeClassOwnership(members: Member[], classes: DanceClass[]): Member[] {
+  const classNameById = new Map(classes.map((danceClass) => [danceClass.id, danceClass.name]))
+  return members.map((member) => {
+    const counts = new Map<string, number>()
+    for (const enrollment of member.enrollments)
+      for (const id of enrollment.classIds) counts.set(id, (counts.get(id) ?? 0) + 1)
+    if (![...counts.values()].some((count) => count > 1)) return member
+    const claimed = new Set<string>()
+    return {
+      ...member,
+      enrollments: member.enrollments.map((enrollment) => ({
+        ...enrollment,
+        classIds: enrollment.classIds.filter((id) => {
+          if ((counts.get(id) ?? 0) <= 1) return true
+          const className = classNameById.get(id)
+          const nameOwner = member.enrollments.find(
+            (candidate) =>
+              candidate.passName === className && candidate.classIds.includes(id),
+          )
+          if (nameOwner) return nameOwner.id === enrollment.id
+          if (claimed.has(id)) return false
+          claimed.add(id)
+          return true
+        }),
+      })),
+    }
+  })
+}
+
 function sweepOrphanClasses(
   classes: DanceClass[],
   members: Member[],
@@ -639,7 +671,10 @@ function useStoredData() {
           attendance?: AttendanceBook
           gigs?: Gig[]
         }
-        const loadedMembers = (saved.members ?? []).map(normalizeMember)
+        const loadedMembers = dedupeClassOwnership(
+          (saved.members ?? []).map(normalizeMember),
+          saved.classes ?? [],
+        )
         if (loadedMembers.length) setMembers(loadedMembers)
         if (saved.classes?.length)
           setClasses(sweepOrphanClasses(saved.classes, loadedMembers, saved.passTemplates ?? []))
@@ -827,8 +862,9 @@ function App() {
         }
         // syncJson과 같은 키 순서·같은 객체로 직렬화해 다음 렌더의 syncJson과 정확히
         // 일치시킨다 (어긋나면 방금 받은 데이터를 곧바로 되올리는 왕복이 생긴다)
-        // 흔적 수업 청소는 여기서도 적용 — 청소로 달라지면 한 차례 되올려 서버도 수렴시킨다
-        const remoteMembers = (parsed.members ?? []).map(normalizeMember)
+        // 흔적 수업 청소·중복 소속 정리는 여기서도 적용해 어떤 기기 데이터든 수렴시킨다
+        const rawMembers = (parsed.members ?? []).map(normalizeMember)
+        const remoteMembers = dedupeClassOwnership(rawMembers, parsed.classes ?? [])
         const next = {
           attendance: parsed.attendance ?? {},
           classes: sweepOrphanClasses(
@@ -846,9 +882,13 @@ function App() {
         setAttendance(next.attendance)
         setGigs(next.gigs)
         clearPushTimer()
-        // 기준선은 '서버에 실제로 있던 값'으로 잡는다. 청소로 로컬이 달라졌다면
-        // 다음 렌더에서 편집으로 감지되어 청소된 데이터가 자동으로 서버에 올라간다.
-        const serialized = JSON.stringify({ ...next, classes: parsed.classes ?? [] })
+        // 기준선은 '서버에 실제로 있던 값'으로 잡는다. 청소·정리로 로컬이 달라졌다면
+        // 다음 렌더에서 편집으로 감지되어 정리된 데이터가 자동으로 서버에 올라간다.
+        const serialized = JSON.stringify({
+          ...next,
+          classes: parsed.classes ?? [],
+          members: rawMembers,
+        })
         lastSyncedJsonRef.current = serialized
         editBaselineRef.current = serialized
         syncMetaRef.current = {
@@ -1165,7 +1205,15 @@ function App() {
           ? {
               ...member,
               status: 'active' as MemberStatus,
-              enrollments: [...member.enrollments, enrollmentFromPass(pass)],
+              // 새 수강권의 수업이 기존 수강권에 붙어 있었다면 떼어낸다
+              // (한 수업이 두 수강권에 있으면 출석 차감이 엉뚱한 곳에서 일어남)
+              enrollments: [
+                ...member.enrollments.map((enrollment) => ({
+                  ...enrollment,
+                  classIds: enrollment.classIds.filter((id) => !pass.classIds.includes(id)),
+                })),
+                enrollmentFromPass(pass),
+              ],
             }
           : member,
       ),
@@ -1851,7 +1899,10 @@ function App() {
           return
         }
         if (!window.confirm('현재 데이터를 백업 파일 내용으로 교체할까요?')) return
-        const importedMembers = (saved.members ?? []).map(normalizeMember)
+        const importedMembers = dedupeClassOwnership(
+          (saved.members ?? []).map(normalizeMember),
+          saved.classes ?? [],
+        )
         if (importedMembers.length) setMembers(importedMembers)
         if (saved.classes?.length)
           setClasses(sweepOrphanClasses(saved.classes, importedMembers, saved.passTemplates ?? []))
