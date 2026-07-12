@@ -381,7 +381,9 @@ const KR_HOLIDAYS_2026 = new Set([
   '2026-05-05',
   '2026-05-24',
   '2026-05-25',
+  '2026-06-03',
   '2026-06-06',
+  '2026-07-17',
   '2026-08-15',
   '2026-08-17',
   '2026-09-24',
@@ -398,14 +400,33 @@ const KR_FIXED_HOLIDAYS = new Set([
   '03-01',
   '05-05',
   '06-06',
+  '07-17', // 제헌절 — 2026년부터 공휴일 재지정 (18년 만에 부활, 대체공휴일 적용)
   '08-15',
   '10-03',
   '10-09',
   '12-25',
 ])
 
+// 인터넷 공휴일 API(Nager.Date)에서 받아 보강한 날짜들 (localStorage 캐시에서 즉시 복원).
+// 법이 바뀌어 공휴일이 늘거나 대체공휴일이 생겨도 자동으로 따라온다.
+// 오프라인이거나 API가 죽어도 위 내장 목록만으로 동작하므로 앱은 항상 뜬다.
+const holidayCacheKey = 'line-dance-holiday-cache-v1'
+const fetchedHolidays = new Set<string>()
+try {
+  const cached = JSON.parse(localStorage.getItem(holidayCacheKey) ?? 'null') as {
+    dates?: string[]
+  } | null
+  for (const date of cached?.dates ?? []) fetchedHolidays.add(date)
+} catch {
+  // 캐시가 깨졌으면 내장 목록으로만 동작
+}
+
 function isHoliday(dateKey: string) {
-  return KR_HOLIDAYS_2026.has(dateKey) || KR_FIXED_HOLIDAYS.has(dateKey.slice(5))
+  return (
+    KR_HOLIDAYS_2026.has(dateKey) ||
+    KR_FIXED_HOLIDAYS.has(dateKey.slice(5)) ||
+    fetchedHolidays.has(dateKey)
+  )
 }
 
 // 그 날짜에 열리는 수업: 매주 반복 수업 + 그 날짜 전용(1회성) 수업
@@ -741,6 +762,54 @@ function App() {
   } = useStoredData()
   const [tab, setTab] = useState<Tab>('home')
   const [query, setQuery] = useState('')
+  // 공휴일 최신화: 올해·내년 공휴일을 API에서 받아 캐시한다 (30일마다 갱신).
+  // 실패해도 조용히 내장 목록으로 동작한다.
+  const [, setHolidayTick] = useState(0)
+  useEffect(() => {
+    const year = today.getFullYear()
+    try {
+      const cached = JSON.parse(localStorage.getItem(holidayCacheKey) ?? 'null') as {
+        fetchedAt?: number
+        years?: number[]
+      } | null
+      if (
+        cached?.fetchedAt &&
+        Date.now() - cached.fetchedAt < 30 * 86400000 &&
+        cached.years?.includes(year) &&
+        cached.years?.includes(year + 1)
+      )
+        return
+    } catch {
+      // 캐시가 깨졌으면 새로 받는다
+    }
+    let cancelled = false
+    void (async () => {
+      try {
+        const years = [year, year + 1]
+        const dates: string[] = []
+        for (const targetYear of years) {
+          const res = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${targetYear}/KR`)
+          if (!res.ok) return
+          const list = (await res.json()) as Array<{ date?: string }>
+          for (const item of list) {
+            if (typeof item?.date === 'string') dates.push(item.date)
+          }
+        }
+        if (cancelled || !dates.length) return
+        localStorage.setItem(
+          holidayCacheKey,
+          JSON.stringify({ dates, fetchedAt: Date.now(), years }),
+        )
+        for (const date of dates) fetchedHolidays.add(date)
+        setHolidayTick((tick) => tick + 1)
+      } catch {
+        // 오프라인 등 — 내장 목록으로 동작
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
   const [selectedClassId, setSelectedClassId] = useState(isDemoMode ? seedClasses[0].id : '')
   const [attendanceDate, setAttendanceDate] = useState(todayKey)
   const [convertedMemberId, setConvertedMemberId] = useState<string | null>(null)
