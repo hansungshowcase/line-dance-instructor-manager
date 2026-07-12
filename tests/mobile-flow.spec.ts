@@ -136,3 +136,31 @@ test('instructor can manage classes, members, attendance, and payment details', 
   await timeCard.getByRole('button', { name: '확인' }).click()
   await expect(timeCard.getByRole('button', { name: /출석 (체크|수정)/ })).toBeVisible()
 })
+
+test('deleting a pass removes its classes from the timetable and pickers', async ({ page }) => {
+  // 삭제 전: 시간표와 출석 수업 선택에 초급 라인댄스가 있다
+  await page.getByRole('button', { name: '시간표', exact: true }).click()
+  await expect(
+    page.locator('.timeClassCard').filter({ hasText: '초급 라인댄스' }),
+  ).toHaveCount(1)
+
+  // 만든 수강권 관리에서 초급 수강권 삭제
+  await page.getByRole('button', { name: '회원', exact: true }).click()
+  const manageDrawer = page.locator('details.formDrawer').filter({ hasText: '만든 수강권 관리' })
+  await manageDrawer.locator('summary').first().click()
+  const passEditor = manageDrawer
+    .locator('details.classEditor')
+    .filter({ hasText: '초급 라인댄스 월수강권' })
+  await passEditor.locator('summary').click()
+  await passEditor.getByRole('button', { name: '삭제', exact: true }).click()
+
+  // 시간표에서 사라진다
+  await page.getByRole('button', { name: '시간표', exact: true }).click()
+  await expect(
+    page.locator('.timeClassCard').filter({ hasText: '초급 라인댄스' }),
+  ).toHaveCount(0)
+
+  // 출석 탭 수업 선택란에서도 사라진다
+  await page.getByRole('button', { name: '출석', exact: true }).click()
+  await expect(page.locator('select option', { hasText: '초급 라인댄스' })).toHaveCount(0)
+})
