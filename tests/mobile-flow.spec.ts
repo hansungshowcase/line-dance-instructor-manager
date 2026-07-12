@@ -105,6 +105,7 @@ test('instructor can manage classes, members, attendance, and payment details', 
   // 상담 → 등록 회원 전환 (상담 탭 안에서 수강권 선택까지 완료)
   await page.getByRole('button', { name: '상담', exact: true }).click()
   const consultCard = page.locator('.consultCard').filter({ hasText: '정수진' })
+  await consultCard.locator('summary').click()
   await consultCard.getByRole('button', { name: '등록 회원으로 전환' }).click()
   await consultCard.locator('select').selectOption('pass-beginner-monthly')
   await consultCard.getByRole('button', { name: '전환 완료' }).click()
@@ -116,8 +117,9 @@ test('instructor can manage classes, members, attendance, and payment details', 
   await page.getByRole('button', { name: /전체 출석 처리/ }).click()
   await expect(page.getByText('미체크 0')).toBeVisible()
 
-  // 회원별 날짜별 출석 이력 조회
+  // 회원별 날짜별 출석 이력 조회 (카드 펼침 → 이력 펼침)
   const historyRow = page.locator('.memberStatRow').filter({ hasText: '김미영' })
+  await historyRow.locator('summary.statSummary').click()
   await historyRow.locator('details.historyDetails summary').click()
   await expect(historyRow.locator('.historyDetails li').first()).toBeVisible()
 

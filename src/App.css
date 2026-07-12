@@ -1404,6 +1404,50 @@ button {
   font-weight: 600;
 }
 
+/* 출석 날짜: ‹ › 로 하루씩 이동 */
+.dateStepper {
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
+  gap: 6px;
+}
+
+.dateStepper button {
+  min-height: 50px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: white;
+  color: var(--sub);
+  font-size: 20px;
+  font-weight: 700;
+}
+
+/* 대기자 이름 칩 — 누르면 그 수강권으로 바로 등록 */
+.waitNames {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.waitNameChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: white;
+  color: var(--ink);
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.waitNameChip b {
+  color: var(--primary-deep);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 /* 상담 카드 하단: 전환 + 수정 + 삭제 버튼 한 줄 */
 .consultActions {
   display: grid;
@@ -1984,6 +2028,64 @@ button {
   border-radius: var(--radius-md);
 }
 
+/* 접힌 상담 카드: 이름 · 상담일 · 구분 한 줄 */
+.consultSummary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.consultSummary::-webkit-details-marker {
+  display: none;
+}
+
+.consultSummary strong {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.consultSummary small {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.consultChevron {
+  flex: 0 0 auto;
+  color: var(--muted);
+  transition: transform 0.15s ease;
+}
+
+.consultCard[open] > .consultSummary .consultChevron {
+  transform: rotate(90deg);
+}
+
+.consultPhone {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 40px;
+  width: fit-content;
+  color: var(--sub);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.consultPhone svg {
+  color: var(--primary);
+}
+
 .consultHead {
   display: flex;
   justify-content: space-between;
@@ -2013,8 +2115,10 @@ button {
   color: var(--primary);
 }
 
-.consultHead b {
-  align-self: start;
+.consultHead b,
+.consultSummary > b {
+  flex: 0 0 auto;
+  align-self: center;
   border-radius: 6px;
   padding: 5px 8px;
   font-size: 11px;
@@ -2090,12 +2194,39 @@ button {
 }
 
 .memberStatRow {
+  border-radius: var(--radius-md);
+}
+
+/* 접힌 요약 줄: 이름 + 출석 요약 */
+.statSummary {
   display: grid;
-  grid-template-columns: 42px 1fr auto;
-  gap: 10px 12px;
+  grid-template-columns: 42px 1fr auto 15px;
+  gap: 12px;
   align-items: center;
   padding: 13px 14px;
-  border-radius: var(--radius-md);
+  list-style: none;
+  cursor: pointer;
+}
+
+.statSummary::-webkit-details-marker {
+  display: none;
+}
+
+.statChevron {
+  color: var(--muted);
+  transition: transform 0.15s ease;
+}
+
+.memberStatRow[open] > .statSummary .statChevron {
+  transform: rotate(90deg);
+}
+
+.statDetail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding: 10px 14px 13px;
 }
 
 .statBig {
@@ -2173,10 +2304,14 @@ button {
 }
 
 .statChips {
-  grid-column: 1 / -1;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+/* 요약 줄 안의 칩은 줄바꿈 없이 오른쪽에 붙는다 */
+.statSummary .statChips {
+  flex-wrap: nowrap;
 }
 
 .statChips b {

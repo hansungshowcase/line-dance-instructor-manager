@@ -188,6 +188,11 @@ function addMonthsFrom(dateKey: string, months: number) {
   return toDateKey(new Date(year, month - 1 + months, day))
 }
 
+function addDaysFrom(dateKey: string, days: number) {
+  const [year, month, day] = (dateKey || todayKey).split('-').map(Number)
+  return toDateKey(new Date(year, month - 1, day + days))
+}
+
 function makeId(prefix: string) {
   return `${prefix}-${crypto.randomUUID().slice(0, 8)}`
 }
@@ -4253,7 +4258,8 @@ function ConsultationsView({
   const [editingId, setEditingId] = useState<string | null>(null)
   const [convertingId, setConvertingId] = useState<string | null>(null)
   const [pickedPassId, setPickedPassId] = useState('')
-  // 대기자를 관심 수업(그룹 수강권)별로 묶는다 — 정원이 차면 개강 신호
+  // 대기자를 관심 수업(그룹 수강권)별로 묶는다 — 대기를 받는 수강권은 전부 보여주고,
+  // 많이 찬 순서로 정렬해 개강 임박한 수업이 위로 온다
   const waitGroups = passTemplates
     .filter((pass) => pass.type !== 'private')
     .map((pass) => ({
@@ -4262,7 +4268,10 @@ function ConsultationsView({
       label: pass.name,
       waiting: waitlistMembers.filter((member) => member.interest === pass.name),
     }))
-    .filter((group) => group.waiting.length > 0)
+    .sort(
+      (a, b) =>
+        b.waiting.length - a.waiting.length || a.label.localeCompare(b.label, 'ko'),
+    )
   const etcWaiting = waitlistMembers.filter(
     (member) =>
       !passTemplates.some(
@@ -4310,7 +4319,7 @@ function ConsultationsView({
         </Field>
       </FormDrawer>
 
-      {waitlistMembers.length > 0 && (
+      {(waitGroups.length > 0 || etcWaiting.length > 0) && (
         <section className="panel">
           <h2>대기 현황</h2>
           <div className="listStack">
@@ -4333,7 +4342,28 @@ function ConsultationsView({
                       <i style={{ width: `${percent}%` }} />
                     </div>
                   )}
-                  <small>{group.waiting.map((member) => member.name).join(' · ')}</small>
+                  {group.waiting.length > 0 && (
+                    <div className="waitNames">
+                      {group.waiting.map((member) => (
+                        <button
+                          type="button"
+                          className="waitNameChip"
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                `${member.name}님을 등록 회원으로 전환하고 '${group.label}' 수강권을 적용할까요?`,
+                              )
+                            ) {
+                              onConvertMember(member.id, group.key)
+                            }
+                          }}
+                          key={member.id}
+                        >
+                          {member.name} <b>등록</b>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )
             })}
@@ -4353,7 +4383,9 @@ function ConsultationsView({
               </div>
             )}
           </div>
-          <p className="hint ruleHint">정원이 차면 홈 '우선 확인'에도 알림이 떠요.</p>
+          <p className="hint ruleHint">
+            이름을 누르면 그 수강권으로 바로 등록돼요. 정원이 차면 홈에도 알림이 떠요.
+          </p>
         </section>
       )}
 
@@ -4369,16 +4401,17 @@ function ConsultationsView({
         </div>
         <div className="listStack">
           {followUpMembers.map((member) => (
-            <article className="consultCard" key={member.id}>
-              <div className="consultHead">
-                <div>
-                  <strong>{member.name}</strong>
-                  <a href={`tel:${member.phone}`}>
-                    <Phone size={13} /> {member.phone}
-                  </a>
-                </div>
+            <details className="consultCard" key={member.id}>
+              {/* 닫힌 상태: 이름 · 상담일 · 구분 한 줄. 누르면 상세와 버튼이 펼쳐진다 */}
+              <summary className="consultSummary">
+                <strong>{member.name}</strong>
+                <small>{member.consultedAt ? member.consultedAt.slice(5).replace('-', '/') : ''}</small>
                 <b className={`status-${member.status}`}>{memberStatusLabel(member.status)}</b>
-              </div>
+                <ChevronRight size={14} className="consultChevron" />
+              </summary>
+              <a className="consultPhone" href={`tel:${member.phone}`}>
+                <Phone size={13} /> {member.phone}
+              </a>
               <div className="consultBody">
                 <span>
                   {member.consultedAt ?? '상담일 없음'} · {member.interest || '관심 수업 미정'}
@@ -4517,7 +4550,7 @@ function ConsultationsView({
                   </button>
                 </div>
               )}
-            </article>
+            </details>
           ))}
           {!followUpMembers.length && (
             <p className="emptyText">
@@ -4598,23 +4631,39 @@ function AttendanceView({
     <section className="screen">
       <section className="panel">
         <h2>출석 체크</h2>
-        <div className="split">
-          <Field label="날짜">
+        <div className="formGrid compact">
+        <Field label="날짜 (‹ › 로 하루씩 이동)">
+          <div className="dateStepper">
+            <button
+              type="button"
+              aria-label="전날"
+              onClick={() => setAttendanceDate(addDaysFrom(attendanceDate, -1))}
+            >
+              ‹
+            </button>
             <input
               type="date"
               value={attendanceDate}
               onChange={(event) => setAttendanceDate(event.target.value)}
             />
-          </Field>
-          <Field label="수업">
-            <select value={selectedClassId} onChange={(event) => setSelectedClassId(event.target.value)}>
-              {classes.map((danceClass) => (
-                <option value={danceClass.id} key={danceClass.id}>
-                  {danceClass.name}
-                </option>
-              ))}
-            </select>
-          </Field>
+            <button
+              type="button"
+              aria-label="다음날"
+              onClick={() => setAttendanceDate(addDaysFrom(attendanceDate, 1))}
+            >
+              ›
+            </button>
+          </div>
+        </Field>
+        <Field label="수업">
+          <select value={selectedClassId} onChange={(event) => setSelectedClassId(event.target.value)}>
+            {classes.map((danceClass) => (
+              <option value={danceClass.id} key={danceClass.id}>
+                {danceClass.name}
+              </option>
+            ))}
+          </select>
+        </Field>
         </div>
         {selectedClass && (
           <p className="hint">
@@ -4683,37 +4732,44 @@ function AttendanceView({
         />
         <div className="listStack">
           {memberStats.map(({ absent, lastPresent, member, monthPresent, present, records }) => (
-            <article className="memberStatRow" key={member.id}>
-              <div className="taskAvatar">{member.name.slice(0, 1)}</div>
-              <div className="statBody">
-                <strong>{member.name}</strong>
-                <span>
-                  {member.enrollments.length
-                    ? `수강권 ${member.enrollments.length}개`
-                    : '수강권 없음'}
-                </span>
-              </div>
-              {/* 수강권이 여러 개면 각각 따로 표시된다 */}
-              <div className="statPassLines">
-                {member.enrollments.map((enrollment) => {
-                  const status = enrollmentStatus(enrollment)
-                  return (
-                    <div className="statPassLine" key={enrollment.id}>
-                      <span>{enrollment.passName}</span>
-                      <b className={status === 'paid' ? '' : status}>
-                        {enrollmentSummaryLabel(enrollment)}
-                      </b>
-                    </div>
-                  )
-                })}
-                {!member.enrollments.length && <span className="statNone">-</span>}
-              </div>
-              <div className="statChips">
-                <b className="ok">출석 {present}</b>
-                <b className="danger">결석 {absent}</b>
-                <b>이번 달 {monthPresent}회</b>
-                <b>{lastPresent ? `최근 ${lastPresent.slice(5).replace('-', '/')}` : '기록 없음'}</b>
-              </div>
+            <details className="memberStatRow" key={member.id}>
+              {/* 닫힌 상태: 이름 + 출석 요약 한 줄. 누르면 수강권별 현황과 이력이 펼쳐진다 */}
+              <summary className="statSummary">
+                <div className="taskAvatar">{member.name.slice(0, 1)}</div>
+                <div className="statBody">
+                  <strong>{member.name}</strong>
+                  <span>
+                    {member.enrollments.length
+                      ? `수강권 ${member.enrollments.length}개`
+                      : '수강권 없음'}
+                  </span>
+                </div>
+                <div className="statChips">
+                  <b className="ok">출석 {present}</b>
+                  <b>이달 {monthPresent}</b>
+                </div>
+                <ChevronRight size={15} className="statChevron" />
+              </summary>
+              <div className="statDetail">
+                {/* 수강권이 여러 개면 각각 따로 표시된다 */}
+                <div className="statPassLines">
+                  {member.enrollments.map((enrollment) => {
+                    const status = enrollmentStatus(enrollment)
+                    return (
+                      <div className="statPassLine" key={enrollment.id}>
+                        <span>{enrollment.passName}</span>
+                        <b className={status === 'paid' ? '' : status}>
+                          {enrollmentSummaryLabel(enrollment)}
+                        </b>
+                      </div>
+                    )
+                  })}
+                  {!member.enrollments.length && <span className="statNone">-</span>}
+                </div>
+                <div className="statChips">
+                  <b className="danger">결석 {absent}</b>
+                  <b>{lastPresent ? `최근 ${lastPresent.slice(5).replace('-', '/')}` : '기록 없음'}</b>
+                </div>
               {records.length > 0 && (
                 <details className="historyDetails">
                   <summary>날짜별 이력 보기 ({records.length}건)</summary>
@@ -4748,7 +4804,8 @@ function AttendanceView({
                   </ul>
                 </details>
               )}
-            </article>
+              </div>
+            </details>
           ))}
           {!memberStats.length && <p className="emptyText">등록된 회원이 없습니다.</p>}
         </div>
