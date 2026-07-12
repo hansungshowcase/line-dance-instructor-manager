@@ -12,6 +12,12 @@
   padding-top: 0;
 }
 
+/* + 버튼(FAB)이 있는 탭은 스크롤 끝에서 마지막 항목이 가려지지 않게 여유를 더 준다 */
+.appShell.tab-members,
+.appShell.tab-consultations {
+  padding-bottom: calc(160px + env(safe-area-inset-bottom));
+}
+
 .screen {
   display: flex;
   flex-direction: column;
