@@ -1313,11 +1313,37 @@ button {
   color: var(--muted);
 }
 
-/* 상담 카드 하단: 전환 + 삭제 버튼 한 줄 */
+/* 상담 카드 하단: 전환 + 수정 + 삭제 버튼 한 줄 */
 .consultActions {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr auto auto;
   gap: 8px;
+}
+
+.consultEditButton {
+  min-height: 44px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: white;
+  color: var(--ink);
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* 전환 시 수강권 선택 패널 / 상담 수정 폼 */
+.convertPanel,
+.consultEditForm {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.convertPanel .choiceButtons,
+.consultEditForm .choiceButtons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
 }
 
 .consultDeleteButton {

@@ -69,6 +69,9 @@ type PaymentRecord = {
   amount: number
 }
 
+// 수강권·회원을 삭제해도 매출(정산) 기록은 지워지지 않도록 옮겨 담는 보존 장부
+type ArchivedPayment = PaymentRecord & { memberName: string; passName: string }
+
 // 회원이 보유한 수강권 1개 — 결제일·잔여횟수·결제내역이 수강권마다 독립적이다
 type Enrollment = {
   id: string
@@ -660,6 +663,7 @@ function useStoredData() {
   )
   const [attendance, setAttendance] = useState<AttendanceBook>({})
   const [gigs, setGigs] = useState<Gig[]>([])
+  const [paymentArchive, setPaymentArchive] = useState<ArchivedPayment[]>([])
   // 저장된 데이터를 불러오는 첫 로드가 끝났는지 (동기화가 '로드'와 '편집'을 구분하는 데 쓴다)
   const [hydrated, setHydrated] = useState(isDemoMode)
 
@@ -674,6 +678,7 @@ function useStoredData() {
           passTemplates?: PassTemplate[]
           attendance?: AttendanceBook
           gigs?: Gig[]
+          paymentArchive?: ArchivedPayment[]
         }
         const loadedMembers = dedupeClassOwnership(
           (saved.members ?? []).map(normalizeMember),
@@ -685,6 +690,7 @@ function useStoredData() {
         if (saved.passTemplates?.length) setPassTemplates(saved.passTemplates)
         if (saved.attendance) setAttendance(saved.attendance)
         if (saved.gigs?.length) setGigs(saved.gigs)
+        if (saved.paymentArchive?.length) setPaymentArchive(saved.paymentArchive)
       } catch {
         localStorage.removeItem(storageKey)
       }
@@ -696,9 +702,9 @@ function useStoredData() {
     if (isDemoMode) return
     localStorage.setItem(
       storageKey,
-      JSON.stringify({ members, classes, passTemplates, attendance, gigs }),
+      JSON.stringify({ members, classes, passTemplates, attendance, gigs, paymentArchive }),
     )
-  }, [members, classes, passTemplates, attendance, gigs])
+  }, [members, classes, passTemplates, attendance, gigs, paymentArchive])
 
   return {
     attendance,
@@ -707,11 +713,13 @@ function useStoredData() {
     hydrated,
     members,
     passTemplates,
+    paymentArchive,
     setAttendance,
     setClasses,
     setGigs,
     setMembers,
     setPassTemplates,
+    setPaymentArchive,
   }
 }
 
@@ -723,11 +731,13 @@ function App() {
     hydrated,
     members,
     passTemplates,
+    paymentArchive,
     setAttendance,
     setClasses,
     setGigs,
     setMembers,
     setPassTemplates,
+    setPaymentArchive,
   } = useStoredData()
   const [tab, setTab] = useState<Tab>('home')
   const [query, setQuery] = useState('')
@@ -784,7 +794,14 @@ function App() {
   // 전체 앱 데이터를 JSON 문자열 하나로 /sync/{code} 문서에 저장한다.
   // 서버가 확정한 스냅샷만 믿고 판단하며, 편집 시각(updatedAt)을 비교해 더 최신 쪽이
   // 이긴다(last-write-wins). 미전송 편집은 dirty 기록으로 남겨 다음 접속 때 복구한다.
-  const syncJson = JSON.stringify({ attendance, classes, gigs, members, passTemplates })
+  const syncJson = JSON.stringify({
+    attendance,
+    classes,
+    gigs,
+    members,
+    passTemplates,
+    paymentArchive,
+  })
   const [syncCode, setSyncCode] = useState(() =>
     isDemoMode ? '' : localStorage.getItem(syncCodeKey) ?? '',
   )
@@ -863,6 +880,7 @@ function App() {
           passTemplates?: PassTemplate[]
           attendance?: AttendanceBook
           gigs?: Gig[]
+          paymentArchive?: ArchivedPayment[]
         }
         // syncJson과 같은 키 순서·같은 객체로 직렬화해 다음 렌더의 syncJson과 정확히
         // 일치시킨다 (어긋나면 방금 받은 데이터를 곧바로 되올리는 왕복이 생긴다)
@@ -879,12 +897,14 @@ function App() {
           gigs: parsed.gigs ?? [],
           members: remoteMembers,
           passTemplates: parsed.passTemplates ?? [],
+          paymentArchive: parsed.paymentArchive ?? [],
         }
         setMembers(next.members)
         setClasses(next.classes)
         setPassTemplates(next.passTemplates)
         setAttendance(next.attendance)
         setGigs(next.gigs)
+        setPaymentArchive(next.paymentArchive)
         clearPushTimer()
         // 기준선은 '서버에 실제로 있던 값'으로 잡는다. 청소·정리로 로컬이 달라졌다면
         // 다음 렌더에서 편집으로 감지되어 정리된 데이터가 자동으로 서버에 올라간다.
@@ -973,6 +993,7 @@ function App() {
     setGigs,
     setMembers,
     setPassTemplates,
+    setPaymentArchive,
   ])
 
   // 로컬 편집 감지: 연결 상태와 무관하게 '미전송 편집 있음'을 기기에 기억해 둔다.
@@ -1162,6 +1183,7 @@ function App() {
         if (enrollment.lastPaidAt && attendanceDate < enrollment.lastPaidAt) return false
         return true
       })
+        .sort((a, b) => a.name.localeCompare(b.name, 'ko'))
     : []
   const hasRealData = !isDemoMode && members.length > 0
   const backupAgeDays = lastBackupAt
@@ -1263,6 +1285,19 @@ function App() {
   }
 
   function removeEnrollment(memberId: string, enrollmentId: string) {
+    // 매출(정산) 기록은 지우지 않는다 — 결제 내역을 보존 장부로 옮긴 뒤 수강권만 제거
+    const owner = members.find((member) => member.id === memberId)
+    const target = owner?.enrollments.find((enrollment) => enrollment.id === enrollmentId)
+    if (owner && target && target.payments.length) {
+      setPaymentArchive((current) => [
+        ...current,
+        ...target.payments.map((payment) => ({
+          ...payment,
+          memberName: owner.name,
+          passName: target.passName,
+        })),
+      ])
+    }
     setMembers((current) =>
       current.map((member) =>
         member.id === memberId
@@ -1275,7 +1310,7 @@ function App() {
           : member,
       ),
     )
-    notify('수강권이 삭제되었습니다')
+    notify('수강권이 삭제되었습니다 (결제 기록은 수납 내역에 보존)')
   }
 
   function quickRenew(memberId: string, enrollmentId: string) {
@@ -1519,11 +1554,16 @@ function App() {
       notify('이름과 전화번호를 입력해 주세요')
       return
     }
-    // 관심 수업·유입경로: '기타'를 고르면 직접 입력한 값을 쓴다
+    // 관심 수업·유입경로: '기타'를 고르면 직접 입력한 값을 쓴다.
+    // 카테고리 안에서 직접 입력한 경우 카테고리명을 앞에 붙여 기록한다 (예: "라인댄스 · 오전반")
     const interestChoice = String(formData.get('interestChoice') ?? '')
+    const interestCategory = String(formData.get('interestCategory') ?? '')
+    const interestCustom = String(formData.get('interestCustom') ?? '').trim()
     const interest =
       interestChoice === '기타'
-        ? String(formData.get('interestCustom') ?? '').trim()
+        ? interestCustom && interestCategory && interestCategory !== '기타'
+          ? `${interestCategory} · ${interestCustom}`
+          : interestCustom
         : interestChoice
     const sourceChoice = String(formData.get('sourceChoice') ?? '')
     const source =
@@ -1545,17 +1585,52 @@ function App() {
     notify('상담이 등록되었습니다')
   }
 
-  function convertToMember(memberId: string) {
+  // 상담 탭에서 바로 전환 + 수강권 적용까지 끝낸다 (탭 이동 없음)
+  function convertToMember(memberId: string, passId?: string) {
+    const pass = passTemplates.find((item) => item.id === passId)
+    setMembers((current) =>
+      current.map((member) => {
+        if (member.id !== memberId) return member
+        if (!pass) return { ...member, status: 'active' as MemberStatus }
+        return {
+          ...member,
+          status: 'active' as MemberStatus,
+          enrollments: [
+            ...member.enrollments.map((enrollment) => ({
+              ...enrollment,
+              classIds: enrollment.classIds.filter((id) => !pass.classIds.includes(id)),
+            })),
+            enrollmentFromPass(pass),
+          ],
+        }
+      }),
+    )
+    notify(
+      pass
+        ? `등록 회원 전환 완료 — '${pass.name}' 수강권이 적용되었습니다`
+        : '등록 회원으로 전환되었습니다. 회원 탭에서 수강권을 추가해 주세요.',
+    )
+  }
+
+  // 이미 등록한 상담 내역 수정 (이름·연락처·상담일·구분·관심수업·유입경로·메모)
+  function updateConsultation(memberId: string, formData: FormData) {
     setMembers((current) =>
       current.map((member) =>
         member.id === memberId
-          ? { ...member, status: 'active' as MemberStatus }
+          ? {
+              ...member,
+              name: String(formData.get('name') ?? member.name).trim() || member.name,
+              phone: String(formData.get('phone') ?? member.phone),
+              status: String(formData.get('status') ?? member.status) as MemberStatus,
+              consultedAt: String(formData.get('consultedAt') ?? member.consultedAt ?? ''),
+              interest: String(formData.get('interest') ?? member.interest ?? ''),
+              source: String(formData.get('source') ?? member.source ?? ''),
+              note: String(formData.get('note') ?? member.note),
+            }
           : member,
       ),
     )
-    setConvertedMemberId(memberId)
-    setTab('members')
-    notify('등록 회원으로 전환되었습니다. 수강권을 추가해 주세요.')
+    notify('상담 내역이 수정되었습니다')
   }
 
   function markAttendance(
@@ -1799,7 +1874,19 @@ function App() {
   }
 
   function removeMember(memberId: string) {
-    notify('회원이 삭제되었습니다')
+    // 회원을 지워도 매출(정산) 기록은 보존 장부로 옮겨 남긴다
+    const target = members.find((member) => member.id === memberId)
+    const payments = target
+      ? target.enrollments.flatMap((enrollment) =>
+          enrollment.payments.map((payment) => ({
+            ...payment,
+            memberName: target.name,
+            passName: enrollment.passName,
+          })),
+        )
+      : []
+    if (payments.length) setPaymentArchive((current) => [...current, ...payments])
+    notify(payments.length ? '회원이 삭제되었습니다 (결제 기록은 수납 내역에 보존)' : '회원이 삭제되었습니다')
     setMembers((current) => current.filter((member) => member.id !== memberId))
     setAttendance((current) =>
       Object.fromEntries(
@@ -1810,7 +1897,7 @@ function App() {
 
   function exportData() {
     const payload = JSON.stringify(
-      { members, classes, passTemplates, attendance, gigs },
+      { members, classes, passTemplates, attendance, gigs, paymentArchive },
       null,
       2,
     )
@@ -1904,6 +1991,7 @@ function App() {
           passTemplates?: PassTemplate[]
           attendance?: AttendanceBook
           gigs?: Gig[]
+          paymentArchive?: ArchivedPayment[]
         }
         if (!saved.members?.length && !saved.classes?.length) {
           window.alert('백업 파일 형식이 아닙니다.')
@@ -1920,6 +2008,7 @@ function App() {
         if (saved.passTemplates?.length) setPassTemplates(saved.passTemplates)
         if (saved.attendance) setAttendance(saved.attendance)
         if (saved.gigs?.length) setGigs(saved.gigs)
+        if (saved.paymentArchive?.length) setPaymentArchive(saved.paymentArchive)
         notify('백업 가져오기가 완료되었습니다')
       } catch {
         window.alert('파일을 읽을 수 없습니다. 이 앱에서 내보낸 백업 파일인지 확인해 주세요.')
@@ -2011,6 +2100,7 @@ function App() {
           onAddConsultation={addConsultation}
           onConvertMember={convertToMember}
           onRemoveMember={removeMember}
+          onUpdateConsultation={updateConsultation}
           waitlistMembers={waitlistMembers}
         />
       )}
@@ -2033,6 +2123,7 @@ function App() {
         <PaymentsView
           gigs={gigs}
           members={activeMembers}
+          paymentArchive={paymentArchive}
           onQuickRenew={quickRenew}
           onUpdateEnrollment={updateEnrollment}
         />
@@ -2828,16 +2919,18 @@ function TimeClassCard({
   const [timeValue, setTimeValue] = useState(danceClass.startTime)
   // 기간 만료·횟수 소진, 또는 수강 시작 전(결제일 이전 날짜)의 회원은 명단에 뜨지 않는다.
   // 단, 그 날짜에 출석 기록이 이미 있으면 항상 보인다 (날짜별 이력과 시간표 일치 보장)
-  const assignedMembers = members.filter((member) => {
-    if (!memberClassIds(member).includes(danceClass.id)) return false
-    if (attendance[attendanceKey(dateKey, danceClass.id, member.id)]) return true
-    if (member.status !== 'active') return false
-    const enrollment = enrollmentForClass(member, danceClass.id)
-    if (!enrollment) return true
-    if (enrollmentStatus(enrollment) === 'unpaid') return false
-    if (enrollment.lastPaidAt && dateKey < enrollment.lastPaidAt) return false
-    return true
-  })
+  const assignedMembers = members
+    .filter((member) => {
+      if (!memberClassIds(member).includes(danceClass.id)) return false
+      if (attendance[attendanceKey(dateKey, danceClass.id, member.id)]) return true
+      if (member.status !== 'active') return false
+      const enrollment = enrollmentForClass(member, danceClass.id)
+      if (!enrollment) return true
+      if (enrollmentStatus(enrollment) === 'unpaid') return false
+      if (enrollment.lastPaidAt && dateKey < enrollment.lastPaidAt) return false
+      return true
+    })
+    .sort((a, b) => a.name.localeCompare(b.name, 'ko'))
   const checkedCount = assignedMembers.filter(
     (member) => attendance[attendanceKey(dateKey, danceClass.id, member.id)],
   ).length
@@ -3251,6 +3344,8 @@ function MembersView({
 
   const filtered = members
     .filter((member) => {
+      // 회원 목록에는 등록 회원만 — 상담(상담만/대기) 상태는 상담 탭에서 관리한다
+      if (member.status !== 'active') return false
       if (query) {
         const haystack = `${member.name} ${member.phone} ${member.note}`.toLowerCase()
         return haystack.includes(query.toLowerCase())
@@ -3910,6 +4005,70 @@ function AddEnrollmentRow({
   )
 }
 
+// 관심 수업 선택: 상위 카테고리(라인댄스/라틴댄스/개인레슨/기타)를 먼저 고르고,
+// 그 카테고리에 속한 수강권 중에서 선택한다. 어느 카테고리에서든 '기타'로 직접 입력 가능.
+function InterestPicker({ passTemplates }: { passTemplates: PassTemplate[] }) {
+  const [category, setCategory] = useState<LessonType | 'etc'>('line_group')
+  const [choice, setChoice] = useState('')
+  const categories: Array<{ label: string; value: LessonType | 'etc' }> = [
+    { label: '라인댄스', value: 'line_group' },
+    { label: '라틴댄스', value: 'latin_group' },
+    { label: '개인레슨', value: 'private' },
+    { label: '기타', value: 'etc' },
+  ]
+  const categoryLabel = categories.find((item) => item.value === category)?.label ?? ''
+  const visiblePasses =
+    category === 'etc' ? [] : passTemplates.filter((pass) => pass.type === category)
+  const showCustomInput = category === 'etc' || choice === '기타'
+  return (
+    <>
+      <div className="field">
+        <span>관심 수업 종류</span>
+        <div className="paymentFilters categoryChips" role="tablist" aria-label="관심 수업 종류">
+          {categories.map((item) => (
+            <button
+              type="button"
+              className={category === item.value ? 'active' : ''}
+              onClick={() => {
+                setCategory(item.value)
+                setChoice(item.value === 'etc' ? '기타' : '')
+              }}
+              key={item.value}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {/* 선택된 카테고리를 저장 시 함께 넘긴다 */}
+      <input type="hidden" name="interestCategory" value={categoryLabel} />
+      <input type="hidden" name="interestChoice" value={choice} />
+      {category !== 'etc' && (
+        <Field label="관심 수업">
+          <select
+            value={choice}
+            onChange={(event) => setChoice(event.target.value)}
+            aria-label="관심 수업"
+          >
+            <option value="">선택 안 함</option>
+            {visiblePasses.map((pass) => (
+              <option value={pass.name} key={pass.id}>
+                {pass.name}
+              </option>
+            ))}
+            <option value="기타">기타 (직접 입력)</option>
+          </select>
+        </Field>
+      )}
+      {showCustomInput && (
+        <Field label="관심 수업 직접 입력">
+          <input name="interestCustom" placeholder="예: 오전 초급반" autoFocus />
+        </Field>
+      )}
+    </>
+  )
+}
+
 // '기타'를 고르면 직접 입력 칸이 나타나는 선택 상자
 function SelectWithCustom({
   label,
@@ -3956,15 +4115,21 @@ function ConsultationsView({
   onAddConsultation,
   onConvertMember,
   onRemoveMember,
+  onUpdateConsultation,
 }: {
   consultationMembers: Member[]
   passTemplates: PassTemplate[]
   waitlistMembers: Member[]
   onAddConsultation: (formData: FormData) => void
-  onConvertMember: (memberId: string) => void
+  onConvertMember: (memberId: string, passId?: string) => void
   onRemoveMember: (memberId: string) => void
+  onUpdateConsultation: (memberId: string, formData: FormData) => void
 }) {
   const [query, setQuery] = useState('')
+  // 수정 중인 상담 / 전환 중인 상담(수강권 고르는 중)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [convertingId, setConvertingId] = useState<string | null>(null)
+  const [pickedPassId, setPickedPassId] = useState('')
   const followUpMembers = [...consultationMembers, ...waitlistMembers]
     .sort((a, b) => (b.consultedAt ?? '').localeCompare(a.consultedAt ?? ''))
     .filter((member) => {
@@ -3994,12 +4159,7 @@ function ConsultationsView({
             </select>
           </Field>
         </div>
-        <SelectWithCustom
-          label="관심 수업"
-          name="interest"
-          options={passTemplates.map((pass) => pass.name)}
-          placeholder="예: 오전 초급반"
-        />
+        <InterestPicker passTemplates={passTemplates} />
         <SelectWithCustom
           label="유입경로"
           name="source"
@@ -4040,35 +4200,137 @@ function ConsultationsView({
                 </span>
                 <p>{member.note || '상담 메모 없음'}</p>
               </div>
-              <div className="consultActions">
-                <button
-                  type="button"
-                  className="convertButton"
-                  onClick={() => {
-                    if (
-                      window.confirm(
-                        `${member.name}님을 등록 회원으로 전환할까요? 전환 후 회원 탭에서 수강권을 추가해 주세요.`,
-                      )
-                    ) {
-                      onConvertMember(member.id)
-                    }
+
+              {editingId === member.id && (
+                <form
+                  className="formGrid compact consultEditForm"
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    onUpdateConsultation(member.id, new FormData(event.currentTarget))
+                    setEditingId(null)
                   }}
                 >
-                  등록 회원으로 전환
-                </button>
-                <button
-                  type="button"
-                  className="consultDeleteButton"
-                  aria-label={`${member.name} 상담 삭제`}
-                  onClick={() => {
-                    if (window.confirm(`${member.name}님의 상담 내역을 삭제할까요?`)) {
-                      onRemoveMember(member.id)
-                    }
-                  }}
-                >
-                  삭제
-                </button>
-              </div>
+                  <div className="split">
+                    <Field label="이름">
+                      <input name="name" defaultValue={member.name} required />
+                    </Field>
+                    <Field label="전화번호">
+                      <input name="phone" type="tel" defaultValue={member.phone} required />
+                    </Field>
+                  </div>
+                  <div className="split">
+                    <Field label="상담일">
+                      <input
+                        name="consultedAt"
+                        type="date"
+                        defaultValue={member.consultedAt ?? todayKey}
+                      />
+                    </Field>
+                    <Field label="구분">
+                      <select name="status" defaultValue={member.status}>
+                        <option value="prospect">상담만 한 사람</option>
+                        <option value="waitlist">현재 대기</option>
+                      </select>
+                    </Field>
+                  </div>
+                  <Field label="관심 수업">
+                    <input name="interest" defaultValue={member.interest ?? ''} placeholder="예: 오전 초급반" />
+                  </Field>
+                  <Field label="유입경로">
+                    <input name="source" defaultValue={member.source ?? ''} placeholder="예: 문자, 전화, 지인 소개" />
+                  </Field>
+                  <Field label="상담 메모">
+                    <input name="note" defaultValue={member.note} placeholder="상담 내역 메모" />
+                  </Field>
+                  <div className="choiceButtons">
+                    <button
+                      type="button"
+                      className="draftCancel"
+                      onClick={() => setEditingId(null)}
+                    >
+                      취소
+                    </button>
+                    <button type="submit" className="draftConfirm">
+                      저장
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {convertingId === member.id && (
+                <div className="convertPanel">
+                  <Field label="적용할 수강권 (바로 등록하고 수업까지 자동 배정)">
+                    <select
+                      value={pickedPassId}
+                      onChange={(event) => setPickedPassId(event.target.value)}
+                    >
+                      <option value="">수강권은 나중에 (전환만)</option>
+                      {passTemplates.map((pass) => (
+                        <option value={pass.id} key={pass.id}>
+                          {pass.name}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <div className="choiceButtons">
+                    <button
+                      type="button"
+                      className="draftCancel"
+                      onClick={() => setConvertingId(null)}
+                    >
+                      취소
+                    </button>
+                    <button
+                      type="button"
+                      className="draftConfirm"
+                      onClick={() => {
+                        onConvertMember(member.id, pickedPassId || undefined)
+                        setConvertingId(null)
+                      }}
+                    >
+                      전환 완료
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {editingId !== member.id && convertingId !== member.id && (
+                <div className="consultActions">
+                  <button
+                    type="button"
+                    className="convertButton"
+                    onClick={() => {
+                      setPickedPassId('')
+                      setConvertingId(member.id)
+                      setEditingId(null)
+                    }}
+                  >
+                    등록 회원으로 전환
+                  </button>
+                  <button
+                    type="button"
+                    className="consultEditButton"
+                    onClick={() => {
+                      setEditingId(member.id)
+                      setConvertingId(null)
+                    }}
+                  >
+                    수정
+                  </button>
+                  <button
+                    type="button"
+                    className="consultDeleteButton"
+                    aria-label={`${member.name} 상담 삭제`}
+                    onClick={() => {
+                      if (window.confirm(`${member.name}님의 상담 내역을 삭제할까요?`)) {
+                        onRemoveMember(member.id)
+                      }
+                    }}
+                  >
+                    삭제
+                  </button>
+                </div>
+              )}
             </article>
           ))}
           {!followUpMembers.length && (
@@ -4134,12 +4396,7 @@ function AttendanceView({
       records.sort((a, b) => b.date.localeCompare(a.date))
       return { absent, lastPresent, member, monthPresent, present, records }
     })
-    .sort(
-      (a, b) =>
-        b.monthPresent - a.monthPresent ||
-        b.present - a.present ||
-        a.member.name.localeCompare(b.member.name, 'ko'),
-    )
+    .sort((a, b) => a.member.name.localeCompare(b.member.name, 'ko'))
   const summary = classMembers.reduce(
     (acc, member) => {
       const status = attendance[attendanceKey(attendanceDate, selectedClassId, member.id)]
@@ -4321,11 +4578,13 @@ function AttendanceView({
 function PaymentsView({
   gigs,
   members,
+  paymentArchive,
   onQuickRenew,
   onUpdateEnrollment,
 }: {
   gigs: Gig[]
   members: Member[]
+  paymentArchive: ArchivedPayment[]
   onQuickRenew: (memberId: string, enrollmentId: string) => void
   onUpdateEnrollment: (memberId: string, enrollmentId: string, formData: FormData) => void
 }) {
@@ -4338,8 +4597,9 @@ function PaymentsView({
     unpaid: members.filter((member) => memberWorstStatus(member) === 'unpaid').length,
   }
   const monthKey = todayKey.slice(0, 7)
-  const allPayments = members
-    .flatMap((member) =>
+  // 현재 회원의 결제 + 삭제된 수강권/회원의 보존 기록을 합쳐 매출을 집계한다
+  const allPayments = [
+    ...members.flatMap((member) =>
       member.enrollments.flatMap((enrollment) =>
         enrollment.payments.map((payment) => ({
           ...payment,
@@ -4347,8 +4607,9 @@ function PaymentsView({
           passName: enrollment.passName,
         })),
       ),
-    )
-    .sort((a, b) => b.date.localeCompare(a.date))
+    ),
+    ...paymentArchive,
+  ].sort((a, b) => b.date.localeCompare(a.date))
   const monthTotal = allPayments
     .filter((payment) => payment.date.startsWith(monthKey))
     .reduce((sum, payment) => sum + payment.amount, 0)
@@ -4376,10 +4637,13 @@ function PaymentsView({
       : allPayments.filter((payment) =>
           payment.date.startsWith(logMonth === 'this' ? monthKey : lastMonthKey),
         )
-  const visibleMembers =
+  const visibleMembers = (
     statusFilter === 'all'
       ? members
       : members.filter((member) => memberWorstStatus(member) === statusFilter)
+  )
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name, 'ko'))
   const filters: Array<{ label: string; value: PaymentStatus | 'all' }> = [
     { label: `전체 ${members.length}`, value: 'all' },
     { label: `완납 ${counts.paid}`, value: 'paid' },

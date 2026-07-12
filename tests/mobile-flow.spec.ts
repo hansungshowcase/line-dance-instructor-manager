@@ -102,13 +102,13 @@ test('instructor can manage classes, members, attendance, and payment details', 
     page.locator('.paymentLogRow').filter({ hasText: '최하은' }).first(),
   ).toBeVisible()
 
-  // 상담 → 등록 회원 전환
+  // 상담 → 등록 회원 전환 (상담 탭 안에서 수강권 선택까지 완료)
   await page.getByRole('button', { name: '상담', exact: true }).click()
-  await page
-    .locator('.consultCard')
-    .filter({ hasText: '정수진' })
-    .getByRole('button', { name: '등록 회원으로 전환' })
-    .click()
+  const consultCard = page.locator('.consultCard').filter({ hasText: '정수진' })
+  await consultCard.getByRole('button', { name: '등록 회원으로 전환' }).click()
+  await consultCard.locator('select').selectOption('pass-beginner-monthly')
+  await consultCard.getByRole('button', { name: '전환 완료' }).click()
+  await page.getByRole('button', { name: '회원', exact: true }).click()
   await expect(page.locator('.memberLookupCard').filter({ hasText: '정수진' })).toBeVisible()
 
   // 미체크 회원 전체 출석 처리
