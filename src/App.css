@@ -2225,6 +2225,38 @@ button {
   margin: 0 -15px -15px;
 }
 
+.paymentEditorToggle {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  padding: 13px;
+  background: transparent;
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.gigCard {
+  background: linear-gradient(150deg, var(--warn-soft), #ffffff 60%);
+  border-color: rgba(192, 127, 20, 0.3);
+}
+
+.gigCard .timeClassTop b,
+.gigBadge {
+  background: var(--warn);
+}
+
+.gigDelete {
+  width: 100%;
+  margin-top: 10px;
+}
+
+.dot.gigDot {
+  background: var(--warn);
+}
+
 .paymentEditor summary {
   display: flex;
   justify-content: center;

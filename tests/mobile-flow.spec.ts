@@ -43,7 +43,7 @@ test('instructor can manage classes, members, attendance, and payment details', 
   await memberDrawer.locator('input[name="paidAmount"]').fill('95000')
   await memberDrawer.locator('input[name="note"]').fill('오전반 신규')
   await page.getByRole('button', { name: '추가' }).click()
-  await expect(page.locator('.memberLookupCard').filter({ hasText: '최하은' })).toBeVisible()
+  await expect(page.locator('.memberLookupCard').filter({ hasText: '최하은' }).filter({ hasText: '등록 회원' })).toBeVisible()
 
   // 새 수강권을 만들면 등록 회원 추가 폼의 수강권 목록에 즉시 반영되어야 한다
   const passDrawer = page.locator('details.formDrawer').filter({ hasText: '수강권 만들기' })
@@ -55,12 +55,12 @@ test('instructor can manage classes, members, attendance, and payment details', 
   ).toHaveCount(1)
   await passDrawer.locator('summary').click()
   // 카드를 탭하면 상세가 펼쳐진다
-  await page.locator('.memberLookupCard').filter({ hasText: '최하은' }).locator('.memberCardHead').click()
-  await page.locator('.memberLookupCard').filter({ hasText: '최하은' }).locator('.editMemberButton').click()
+  await page.locator('.memberLookupCard').filter({ hasText: '최하은' }).filter({ hasText: '등록 회원' }).locator('.memberCardHead').click()
+  await page.locator('.memberLookupCard').filter({ hasText: '최하은' }).filter({ hasText: '등록 회원' }).locator('.editMemberButton').click()
   await expect(page.getByText('₩95,000').first()).toBeVisible()
-  await page.locator('.memberLookupCard').filter({ hasText: '최하은' }).locator('textarea[name="note"]').fill('첫 상담 완료, 다음 주 등록 예정')
-  await page.locator('.memberLookupCard').filter({ hasText: '최하은' }).getByRole('button', { name: '저장', exact: true }).click()
-  await page.locator('.memberLookupCard').filter({ hasText: '최하은' }).locator('.editMemberButton').click()
+  await page.locator('.memberLookupCard').filter({ hasText: '최하은' }).filter({ hasText: '등록 회원' }).locator('textarea[name="note"]').fill('첫 상담 완료, 다음 주 등록 예정')
+  await page.locator('.memberLookupCard').filter({ hasText: '최하은' }).filter({ hasText: '등록 회원' }).getByRole('button', { name: '저장', exact: true }).click()
+  await page.locator('.memberLookupCard').filter({ hasText: '최하은' }).filter({ hasText: '등록 회원' }).locator('.editMemberButton').click()
   await expect(
     page.locator('.memberLookupFoot').filter({ hasText: '첫 상담 완료, 다음 주 등록 예정' }),
   ).toBeVisible()
@@ -76,7 +76,7 @@ test('instructor can manage classes, members, attendance, and payment details', 
   // 다음 결제일이 지나면 자동으로 미납 표시
   await page.getByRole('button', { name: '결제', exact: true }).click()
   const paymentCard = page.locator('.paymentCard').filter({ hasText: '최하은' })
-  await paymentCard.locator('details.paymentEditor summary').click()
+  await paymentCard.getByRole('button', { name: '결제 정보 수정' }).click()
   await paymentCard.locator('input[name="nextPaymentDue"]').fill('2026-01-01')
   await paymentCard.getByRole('button', { name: '저장' }).click()
   await expect(paymentCard.locator('b.unpaid')).toHaveText('미납')
@@ -118,7 +118,7 @@ test('instructor can manage classes, members, attendance, and payment details', 
   await timeCard.getByRole('button', { name: /출석 (체크|수정)/ }).click()
   await timeCard
     .locator('.draftRow')
-    .filter({ hasText: '박선희' })
+    .filter({ hasText: '김미영' })
     .getByRole('button', { name: '결석' })
     .click()
   await timeCard.getByRole('button', { name: '확인' }).click()
