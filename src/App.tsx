@@ -2362,6 +2362,30 @@ function HomeView({
         </button>
       </section>
 
+      {/* 새 기기(빈 데이터)에서 처음 열었을 때: 동기화 연결을 바로 안내 */}
+      {sync.ready && !sync.code && members.length === 0 && (
+        <section className="panel syncStarterCard">
+          <strong>다른 기기에서 쓰던 데이터가 있나요?</strong>
+          <p className="hint">동기화 코드를 넣으면 회원·수업이 그대로 불러와져요.</p>
+          <button
+            type="button"
+            className="primaryButton"
+            onClick={() => {
+              setShowTools(true)
+              window.setTimeout(() => {
+                const drawer = document.getElementById('drawer-sync') as HTMLDetailsElement | null
+                if (drawer) {
+                  drawer.open = true
+                  drawer.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                }
+              }, 60)
+            }}
+          >
+            동기화 코드 입력하기
+          </button>
+        </section>
+      )}
+
       <section className="panel">
         <h2>오늘 해야 할 수업</h2>
         <div className="listStack">
@@ -2619,7 +2643,7 @@ function SyncDrawer({ sync, onCopy }: { sync: SyncControls; onCopy: (text: strin
           : '대기 중'
 
   return (
-    <details className="formDrawer syncDrawer">
+    <details className="formDrawer syncDrawer" id="drawer-sync">
       <summary>
         <span>
           <strong>기기 동기화</strong>

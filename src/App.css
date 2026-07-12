@@ -287,6 +287,28 @@ button.rowItem:active {
   color: #8a5b00;
 }
 
+/* 새 기기 첫 실행: 동기화 연결 안내 카드 */
+.syncStarterCard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid rgba(109, 135, 250, 0.35);
+  background: linear-gradient(150deg, var(--primary-soft), #ffffff 70%);
+}
+
+.syncStarterCard strong {
+  font-size: 15px;
+}
+
+.syncStarterCard p {
+  margin: 0;
+}
+
+.syncStarterCard .primaryButton {
+  margin-top: 6px;
+  min-height: 48px;
+}
+
 .homeToolsToggle {
   display: flex;
   align-items: center;
