@@ -1686,6 +1686,21 @@ function App() {
     notify('스케줄이 삭제되었습니다')
   }
 
+  // 매주 반복으로 만든 외부 강의 전체 삭제 (같은 이름 + 같은 시작 시간 = 한 묶음)
+  function removeGigSeries(gigId: string) {
+    const target = gigs.find((gig) => gig.id === gigId)
+    if (!target) return
+    const count = gigs.filter(
+      (gig) => gig.name === target.name && gig.startTime === target.startTime,
+    ).length
+    setGigs((current) =>
+      current.filter(
+        (gig) => !(gig.name === target.name && gig.startTime === target.startTime),
+      ),
+    )
+    notify(`반복 스케줄 ${count}개가 모두 삭제되었습니다`)
+  }
+
   function updateClassTime(classId: string, startTime: string) {
     setClasses((current) =>
       current.map((danceClass) => {
@@ -1902,6 +1917,7 @@ function App() {
           onCreateSlotClass={createSlotClass}
           onRemoveClass={removeClass}
           onRemoveGig={removeGig}
+          onRemoveGigSeries={removeGigSeries}
           onSaveAttendance={saveClassAttendance}
           onUpdateClassTime={updateClassTime}
         />
@@ -2425,6 +2441,7 @@ function ScheduleView({
   onCreateSlotClass,
   onRemoveClass,
   onRemoveGig,
+  onRemoveGigSeries,
   onSaveAttendance,
   onUpdateClassTime,
 }: {
@@ -2443,6 +2460,7 @@ function ScheduleView({
   onCreateSlotClass: (dateKey: string, startTime: string, memberIds: string[]) => void
   onRemoveClass: (classId: string) => void
   onRemoveGig: (gigId: string) => void
+  onRemoveGigSeries: (gigId: string) => void
   onSaveAttendance: (
     date: string,
     classId: string,
@@ -2608,27 +2626,18 @@ function ScheduleView({
                     />
                   ))}
                   {rowGigs.map((gig) => (
-                    <div className="timeClassCard gigCard" key={gig.id}>
-                      <div className="timeClassTop">
-                        <div>
-                          <b className="gigBadge">내 스케줄</b>
-                          <strong>{gig.name}</strong>
-                          <span>{gig.startTime} - {gig.endTime}</span>
-                        </div>
-                        <small>{formatCurrency(gig.fee)}</small>
-                      </div>
-                      <button
-                        type="button"
-                        className="timeDeleteButton gigDelete"
-                        onClick={() => {
-                          if (window.confirm(`'${gig.name}' 스케줄을 삭제할까요?`)) {
-                            onRemoveGig(gig.id)
-                          }
-                        }}
-                      >
-                        삭제
-                      </button>
-                    </div>
+                    <GigTimeCard
+                      gig={gig}
+                      seriesCount={
+                        gigs.filter(
+                          (item) =>
+                            item.name === gig.name && item.startTime === gig.startTime,
+                        ).length
+                      }
+                      onRemoveGig={onRemoveGig}
+                      onRemoveGigSeries={onRemoveGigSeries}
+                      key={gig.id}
+                    />
                   ))}
                 </div>
               </article>
@@ -2652,6 +2661,72 @@ function ScheduleView({
         </div>
       </section>
     </section>
+  )
+}
+
+// 내 스케줄(외부 강의) 카드. 매주 반복으로 만든 스케줄이면 삭제 시
+// "이 날짜만 / 반복 전체" 를 선택하게 한다.
+function GigTimeCard({
+  gig,
+  seriesCount,
+  onRemoveGig,
+  onRemoveGigSeries,
+}: {
+  gig: Gig
+  seriesCount: number
+  onRemoveGig: (gigId: string) => void
+  onRemoveGigSeries: (gigId: string) => void
+}) {
+  const [choosing, setChoosing] = useState(false)
+  return (
+    <div className="timeClassCard gigCard">
+      <div className="timeClassTop">
+        <div>
+          <b className="gigBadge">내 스케줄</b>
+          <strong>{gig.name}</strong>
+          <span>{gig.startTime} - {gig.endTime}</span>
+        </div>
+        <small>{formatCurrency(gig.fee)}</small>
+      </div>
+      {!choosing ? (
+        <button
+          type="button"
+          className="timeDeleteButton gigDelete"
+          onClick={() => {
+            if (seriesCount > 1) {
+              setChoosing(true)
+            } else if (window.confirm(`'${gig.name}' 스케줄을 삭제할까요?`)) {
+              onRemoveGig(gig.id)
+            }
+          }}
+        >
+          삭제
+        </button>
+      ) : (
+        <div className="gigDeleteChoice">
+          <p>매주 반복으로 등록된 스케줄이에요. 어떻게 삭제할까요?</p>
+          <div className="choiceButtons">
+            <button type="button" className="secondaryButton" onClick={() => onRemoveGig(gig.id)}>
+              이 날짜만 삭제
+            </button>
+            <button
+              type="button"
+              className="dangerButton"
+              onClick={() => {
+                if (window.confirm(`'${gig.name}' 반복 스케줄 ${seriesCount}개를 모두 삭제할까요?`)) {
+                  onRemoveGigSeries(gig.id)
+                }
+              }}
+            >
+              반복 전체 삭제 ({seriesCount}개)
+            </button>
+          </div>
+          <button type="button" className="draftCancel" onClick={() => setChoosing(false)}>
+            취소
+          </button>
+        </div>
+      )}
+    </div>
   )
 }
 

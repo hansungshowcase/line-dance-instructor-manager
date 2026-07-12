@@ -2468,6 +2468,36 @@ button {
   margin-top: 10px;
 }
 
+/* 반복 스케줄 삭제: 이 날짜만 / 전체 선택 */
+.gigDeleteChoice {
+  border-top: 1px solid rgba(224, 73, 47, 0.18);
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+.gigDeleteChoice p {
+  margin: 0 0 8px;
+  color: var(--sub);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.gigDeleteChoice .choiceButtons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.gigDeleteChoice .choiceButtons button {
+  min-height: 44px;
+  font-size: 13px;
+}
+
+.gigDeleteChoice .draftCancel {
+  width: 100%;
+  margin-top: 8px;
+}
+
 .dot.gigDot {
   background: var(--warn);
 }
