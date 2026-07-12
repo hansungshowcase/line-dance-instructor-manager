@@ -1606,15 +1606,6 @@ function App() {
     }
   }
 
-  function assignMemberToClass(memberId: string, classId: string) {
-    setMembers((current) =>
-      current.map((member) =>
-        member.id === memberId ? attachClassToMember(member, classId) : member,
-      ),
-    )
-    notify('수업에 배정되었습니다')
-  }
-
   function createSlotClass(dateKey: string, startTime: string, memberIds: string[]) {
     const classId = makeId('class')
     const pickedMembers = members.filter((member) => memberIds.includes(member.id))
@@ -1905,7 +1896,6 @@ function App() {
           gigs={gigs}
           members={members}
           onAddGig={addGig}
-          onAssignMember={assignMemberToClass}
           onCreateSlotClass={createSlotClass}
           onRemoveClass={removeClass}
           onRemoveGig={removeGig}
@@ -2429,7 +2419,6 @@ function ScheduleView({
   gigs,
   members,
   onAddGig,
-  onAssignMember,
   onCreateSlotClass,
   onRemoveClass,
   onRemoveGig,
@@ -2448,7 +2437,6 @@ function ScheduleView({
     repeatUntil?: string,
     skipHolidays?: boolean,
   ) => void
-  onAssignMember: (memberId: string, classId: string) => void
   onCreateSlotClass: (dateKey: string, startTime: string, memberIds: string[]) => void
   onRemoveClass: (classId: string) => void
   onRemoveGig: (gigId: string) => void
@@ -2610,7 +2598,6 @@ function ScheduleView({
                       danceClass={danceClass}
                       dateKey={selectedDateKey}
                       members={members}
-                      onAssignMember={onAssignMember}
                       onRemoveClass={onRemoveClass}
                       onSaveAttendance={onSaveAttendance}
                       onUpdateClassTime={onUpdateClassTime}
@@ -2670,7 +2657,6 @@ function TimeClassCard({
   danceClass,
   dateKey,
   members,
-  onAssignMember,
   onRemoveClass,
   onSaveAttendance,
   onUpdateClassTime,
@@ -2679,7 +2665,6 @@ function TimeClassCard({
   danceClass: DanceClass
   dateKey: string
   members: Member[]
-  onAssignMember: (memberId: string, classId: string) => void
   onRemoveClass: (classId: string) => void
   onSaveAttendance: (
     date: string,
@@ -2688,9 +2673,10 @@ function TimeClassCard({
   ) => void
   onUpdateClassTime: (classId: string, startTime: string) => void
 }) {
-  const [mode, setMode] = useState<'idle' | 'check' | 'assign'>('idle')
+  const [mode, setMode] = useState<'idle' | 'check'>('idle')
   const [draft, setDraft] = useState<Record<string, AttendanceStatus>>({})
-  const [searchTerm, setSearchTerm] = useState('')
+  // 시간 변경·삭제는 자주 쓰지 않으므로 톱니 버튼을 눌렀을 때만 펼친다 (카드 높이 절약)
+  const [showEdit, setShowEdit] = useState(false)
   const [timeValue, setTimeValue] = useState(danceClass.startTime)
   // 기간 만료·횟수 소진, 또는 수강 시작 전(결제일 이전 날짜)의 회원은 명단에 뜨지 않는다
   const assignedMembers = members.filter((member) => {
@@ -2702,12 +2688,6 @@ function TimeClassCard({
     if (enrollment.lastPaidAt && dateKey < enrollment.lastPaidAt) return false
     return true
   })
-  const candidates = members.filter(
-    (member) => !memberClassIds(member).includes(danceClass.id),
-  )
-  const searchedCandidates = candidates.filter((member) =>
-    `${member.name} ${member.phone}`.toLowerCase().includes(searchTerm.toLowerCase()),
-  )
   const checkedCount = assignedMembers.filter(
     (member) => attendance[attendanceKey(dateKey, danceClass.id, member.id)],
   ).length
@@ -2741,8 +2721,27 @@ function TimeClassCard({
         </small>
       </div>
 
-      {/* 모든 수업에서 시간 변경·삭제 가능 (수강권과 연결이 끊긴 수업도 여기서 정리) */}
       {mode === 'idle' && (
+        <div className="cardActions">
+          <button type="button" className="checkStartButton" onClick={startChecking}>
+            {checkedCount > 0 ? '출석 수정' : '출석 체크'}
+            {assignedMembers.length > 0 && ` (${checkedCount}/${assignedMembers.length})`}
+          </button>
+          {isPrivateClass(danceClass) && (
+            <button
+              type="button"
+              className={showEdit ? 'cardEditToggle on' : 'cardEditToggle'}
+              aria-label="수업 시간 변경·삭제"
+              onClick={() => setShowEdit((current) => !current)}
+            >
+              <Settings2 size={17} />
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* 개인레슨만 여기서 시간 변경·삭제. 단체반 수업의 시간·삭제는 '수강권 관리'에서 */}
+      {mode === 'idle' && showEdit && isPrivateClass(danceClass) && (
         <div className="privateActions">
           <input
             type="time"
@@ -2772,27 +2771,6 @@ function TimeClassCard({
           >
             삭제
           </button>
-        </div>
-      )}
-
-      {mode === 'idle' && (
-        <div className="cardActions">
-          <button type="button" className="checkStartButton" onClick={startChecking}>
-            {checkedCount > 0 ? '출석 수정' : '출석 체크'}
-            {assignedMembers.length > 0 && ` (${checkedCount}/${assignedMembers.length})`}
-          </button>
-          {candidates.length > 0 && (
-            <button
-              type="button"
-              className="assignStartButton"
-              onClick={() => {
-                setSearchTerm('')
-                setMode('assign')
-              }}
-            >
-              + 회원 추가
-            </button>
-          )}
         </div>
       )}
 
@@ -2835,48 +2813,6 @@ function TimeClassCard({
         </div>
       )}
 
-      {mode === 'assign' && (
-        <div className="draftRoster">
-          <p className="draftGuide">이름을 검색하고, 나온 회원을 누르면 바로 추가됩니다</p>
-          <input
-            type="search"
-            className="pickSearch"
-            placeholder="이름·전화번호 검색"
-            value={searchTerm}
-            onChange={(event) => setSearchTerm(event.target.value)}
-            autoFocus
-          />
-          {searchTerm &&
-            searchedCandidates.map((member) => (
-              <button
-                type="button"
-                className="pickRow"
-                onClick={() => onAssignMember(member.id, danceClass.id)}
-                key={member.id}
-              >
-                <span className="pickInfo">
-                  <strong>
-                    {member.name}
-                    {member.status !== 'active' && (
-                      <em className="pickStatus">{memberStatusLabel(member.status)}</em>
-                    )}
-                  </strong>
-                  <small>
-                    {member.phone}
-                    {member.enrollments[0] && ` · ${member.enrollments[0].passName}`}
-                  </small>
-                </span>
-                <b>+ 추가</b>
-              </button>
-            ))}
-          {searchTerm && !searchedCandidates.length && (
-            <em className="draftEmpty">검색 결과가 없습니다</em>
-          )}
-          <button type="button" className="draftCancel" onClick={() => setMode('idle')}>
-            닫기
-          </button>
-        </div>
-      )}
     </div>
   )
 }
@@ -3283,7 +3219,7 @@ function MembersView({
                   }}
                 />
               </Field>
-              <Field label="종료 시간 (자동 +1시간, 수정 가능)">
+              <Field label="종료 시간 (자동 +1시간)">
                 <input
                   name="endTime"
                   type="time"

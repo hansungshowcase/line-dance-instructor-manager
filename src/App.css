@@ -627,9 +627,9 @@ button.rowItem:active {
 
 .hourRow {
   display: grid;
-  grid-template-columns: 56px 1fr;
-  gap: 10px;
-  padding: 8px 0;
+  grid-template-columns: 48px 1fr;
+  gap: 8px;
+  padding: 6px 0;
   border-top: 1px solid var(--line);
 }
 
@@ -714,7 +714,7 @@ button.rowItem:active {
   border-radius: var(--radius-md);
   background: linear-gradient(150deg, var(--primary-soft), #ffffff 60%);
   border: 1px solid rgba(109, 135, 250, 0.22);
-  padding: 12px 13px;
+  padding: 9px 11px;
 }
 
 .timeClassTop {
@@ -739,7 +739,7 @@ button.rowItem:active {
 }
 
 .timeClassTop strong {
-  margin-top: 6px;
+  margin-top: 3px;
   font-size: 15px;
   font-weight: 700;
 }
@@ -1050,7 +1050,13 @@ button.rowItem:active {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
-  align-items: start;
+  align-items: stretch;
+}
+
+/* 옆 칸의 라벨이 두 줄로 꺾여도 입력칸끼리는 수평이 맞도록 아래 붙임 */
+.split > .field > input,
+.split > .field > select {
+  margin-top: auto;
 }
 
 input,
@@ -2752,7 +2758,7 @@ button {
 
 .checkStartButton {
   width: 100%;
-  min-height: 48px;
+  min-height: 44px;
   border-radius: var(--radius-sm);
   background: var(--charcoal);
   color: white;
@@ -2861,27 +2867,29 @@ button {
   display: grid;
   grid-template-columns: 1fr;
   gap: 8px;
-  margin-top: 10px;
+  margin-top: 8px;
 }
 
-.cardActions:has(.assignStartButton) {
-  grid-template-columns: 1.6fr 1fr;
+.cardActions:has(.cardEditToggle) {
+  grid-template-columns: 1fr 44px;
 }
 
-.assignStartButton {
-  min-height: 48px;
+/* 개인레슨 시간 변경·삭제를 여는 톱니 버튼 */
+.cardEditToggle {
+  display: grid;
+  place-items: center;
+  min-height: 44px;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
   background: white;
-  color: var(--primary-deep);
-  font-size: 14px;
-  font-weight: 700;
+  color: var(--sub);
   transition: all 0.15s ease;
 }
 
-.assignStartButton:active {
-  transform: scale(0.98);
-  background: var(--primary-soft);
+.cardEditToggle.on {
+  border-color: transparent;
+  background: var(--charcoal);
+  color: white;
 }
 
 .draftGuide {
