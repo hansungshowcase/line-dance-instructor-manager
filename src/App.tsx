@@ -988,6 +988,25 @@ function App() {
     notify('기기 동기화를 해제했어요')
   }
 
+  // URL에 ?connect=코드 가 있으면 코드 입력 없이 바로 연결한다.
+  // (다른 기기에서 만든 코드를 링크로 전달받아 원터치 연결하는 용도)
+  const connectSyncRef = useRef(connectSync)
+  connectSyncRef.current = connectSync
+  useEffect(() => {
+    if (isDemoMode || !firebaseReady || !hydrated) return
+    const params = new URLSearchParams(window.location.search)
+    const code = params.get('connect')
+    if (!code) return
+    params.delete('connect')
+    const rest = params.toString()
+    window.history.replaceState(
+      window.history.state,
+      '',
+      `${window.location.pathname}${rest ? `?${rest}` : ''}`,
+    )
+    connectSyncRef.current(code)
+  }, [hydrated])
+
   useEffect(() => {
     window.scrollTo(0, 0)
   }, [tab])
