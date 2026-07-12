@@ -276,6 +276,11 @@ button.rowItem:active {
   color: white;
 }
 
+.rowTime.gigTime {
+  background: rgba(255, 176, 32, 0.16);
+  color: #8a5b00;
+}
+
 .rowTime b {
   font-size: 14px;
   font-weight: 700;

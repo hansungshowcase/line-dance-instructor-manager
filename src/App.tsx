@@ -1826,6 +1826,7 @@ function App() {
             status: syncStatus,
           }}
           todayClasses={todayClasses}
+          todayGigs={gigs.filter((gig) => gig.date === todayKey)}
           unpaidItems={unpaidItems}
         />
       )}
@@ -1971,6 +1972,7 @@ function HomeView({
   smsTemplates,
   sync,
   todayClasses,
+  todayGigs,
   unpaidItems,
 }: {
   backupAgeDays: number | null
@@ -1988,24 +1990,46 @@ function HomeView({
   smsTemplates: SmsTemplates
   sync: SyncControls
   todayClasses: DanceClass[]
+  todayGigs: Gig[]
   unpaidItems: Array<{ member: Member; enrollment: Enrollment }>
 }) {
   const now = new Date()
   const nowMinutes = now.getHours() * 60 + now.getMinutes()
   const sortedToday = [...todayClasses].sort((a, b) => a.startTime.localeCompare(b.startTime))
+  // 회원 수업 + 내 스케줄(외부 강의)을 합쳐서 오늘 일정으로 본다
+  const todayItems: Array<
+    | { kind: 'class'; danceClass: DanceClass }
+    | { kind: 'gig'; gig: Gig }
+  > = [
+    ...sortedToday.map((danceClass) => ({ danceClass, kind: 'class' as const })),
+    ...todayGigs.map((gig) => ({ gig, kind: 'gig' as const })),
+  ].sort((a, b) => {
+    const aStart = a.kind === 'class' ? a.danceClass.startTime : a.gig.startTime
+    const bStart = b.kind === 'class' ? b.danceClass.startTime : b.gig.startTime
+    return aStart.localeCompare(bStart)
+  })
+  const timeSpans = todayItems.map((item) =>
+    item.kind === 'class'
+      ? { end: item.danceClass.endTime, name: item.danceClass.name, start: item.danceClass.startTime }
+      : { end: item.gig.endTime, name: item.gig.name, start: item.gig.startTime },
+  )
+  const ongoingSpan = timeSpans.find(
+    (item) =>
+      minutesFromTime(item.start) <= nowMinutes && nowMinutes < minutesFromTime(item.end),
+  )
+  const upcomingSpan = timeSpans.find((item) => minutesFromTime(item.start) > nowMinutes)
   const ongoingClass = sortedToday.find(
     (item) =>
       minutesFromTime(item.startTime) <= nowMinutes &&
       nowMinutes < minutesFromTime(item.endTime),
   )
-  const upcomingClass = sortedToday.find((item) => minutesFromTime(item.startTime) > nowMinutes)
-  const heroMessage = ongoingClass
-    ? `지금 수업 중 · ${ongoingClass.name} ${ongoingClass.startTime}~${ongoingClass.endTime}`
-    : upcomingClass
-      ? `다음 수업 ${upcomingClass.startTime} · ${upcomingClass.name}`
-      : sortedToday.length
-        ? '오늘 수업이 모두 끝났어요'
-        : '오늘은 예정된 수업이 없어요'
+  const heroMessage = ongoingSpan
+    ? `지금 진행 중 · ${ongoingSpan.name} ${ongoingSpan.start}~${ongoingSpan.end}`
+    : upcomingSpan
+      ? `다음 일정 ${upcomingSpan.start} · ${upcomingSpan.name}`
+      : timeSpans.length
+        ? '오늘 일정이 모두 끝났어요'
+        : '오늘은 예정된 일정이 없어요'
 
   return (
     <section className="screen">
@@ -2014,7 +2038,7 @@ function HomeView({
           <p>
             {today.getMonth() + 1}월 {today.getDate()}일 {weekdays[today.getDay()]}요일
           </p>
-          <strong>오늘 수업 {todayClasses.length}개</strong>
+          <strong>오늘 일정 {todayItems.length}개</strong>
           <span>{heroMessage}</span>
         </div>
         <button type="button" onClick={() => setTab('schedule')}>
@@ -2026,7 +2050,29 @@ function HomeView({
       <section className="panel">
         <h2>오늘 해야 할 수업</h2>
         <div className="listStack">
-          {sortedToday.map((danceClass) => {
+          {todayItems.map((item) => {
+            if (item.kind === 'gig') {
+              const gig = item.gig
+              return (
+                <button
+                  type="button"
+                  className="rowItem gigRow"
+                  onClick={() => onOpenSchedule('')}
+                  key={gig.id}
+                >
+                  <div className="rowTime gigTime">
+                    <b>{gig.startTime}</b>
+                    <span>{gig.endTime}</span>
+                  </div>
+                  <div className="rowBody">
+                    <strong>{gig.name}</strong>
+                    <small>내 스케줄(외부 강의) · {formatCurrency(gig.fee)}</small>
+                  </div>
+                  <ChevronRight size={16} className="rowChevron" />
+                </button>
+              )
+            }
+            const danceClass = item.danceClass
             const assigned = members.filter((member) =>
               memberClassIds(member).includes(danceClass.id),
             ).length
@@ -2059,7 +2105,7 @@ function HomeView({
               </button>
             )
           })}
-          {!sortedToday.length && <p className="emptyText">오늘 등록된 수업이 없습니다.</p>}
+          {!todayItems.length && <p className="emptyText">오늘 등록된 수업이 없습니다.</p>}
         </div>
       </section>
 

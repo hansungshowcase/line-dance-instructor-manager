@@ -1,5 +1,5 @@
-import { doc, onSnapshot, setDoc, type Unsubscribe } from 'firebase/firestore'
-import { db } from './firebase'
+import type { Unsubscribe } from 'firebase/firestore'
+import { getDb } from './firebase'
 
 // 동기화 코드 길이 (보안규칙에서 20자 이상을 요구하므로 넉넉히 24자)
 export const SYNC_CODE_LENGTH = 24
@@ -33,7 +33,9 @@ export type SyncSnapshot = {
 // updatedAt은 '편집이 일어난 시각'으로 기록되어, 오프라인에서 큐잉됐다가 뒤늦게
 // 도착한 쓰기를 수신 기기가 과거 데이터로 판별하는 근거가 된다.
 export async function pushSync(code: string, json: string, updatedAt: number): Promise<void> {
+  const db = await getDb()
   if (!db) return
+  const { doc, setDoc } = await import('firebase/firestore')
   await setDoc(doc(db, 'sync', code), { data: json, updatedAt })
 }
 
@@ -45,23 +47,38 @@ export function subscribeSync(
   onData: (snapshot: SyncSnapshot) => void,
   onError?: (error: unknown) => void,
 ): Unsubscribe {
-  if (!db) return () => {}
-  return onSnapshot(
-    doc(db, 'sync', code),
-    { includeMetadataChanges: true },
-    (snapshot) => {
-      const confirmed = !snapshot.metadata.fromCache && !snapshot.metadata.hasPendingWrites
-      if (!snapshot.exists()) {
-        onData({ confirmed, json: null, updatedAt: 0 })
-        return
-      }
-      const value = snapshot.data()
-      onData({
-        confirmed,
-        json: typeof value?.data === 'string' ? value.data : null,
-        updatedAt: typeof value?.updatedAt === 'number' ? value.updatedAt : 0,
-      })
-    },
-    (error) => onError?.(error),
-  )
+  let unsubscribe: Unsubscribe | null = null
+  let cancelled = false
+  void (async () => {
+    try {
+      const db = await getDb()
+      if (!db || cancelled) return
+      const { doc, onSnapshot } = await import('firebase/firestore')
+      if (cancelled) return
+      unsubscribe = onSnapshot(
+        doc(db, 'sync', code),
+        { includeMetadataChanges: true },
+        (snapshot) => {
+          const confirmed = !snapshot.metadata.fromCache && !snapshot.metadata.hasPendingWrites
+          if (!snapshot.exists()) {
+            onData({ confirmed, json: null, updatedAt: 0 })
+            return
+          }
+          const value = snapshot.data()
+          onData({
+            confirmed,
+            json: typeof value?.data === 'string' ? value.data : null,
+            updatedAt: typeof value?.updatedAt === 'number' ? value.updatedAt : 0,
+          })
+        },
+        (error) => onError?.(error),
+      )
+    } catch (error) {
+      onError?.(error)
+    }
+  })()
+  return () => {
+    cancelled = true
+    unsubscribe?.()
+  }
 }
