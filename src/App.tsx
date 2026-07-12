@@ -11,12 +11,15 @@ import {
   Phone,
   PhoneCall,
   Plus,
+  RefreshCw,
   Search,
   Settings2,
   Users,
 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import './App.css'
+import { firebaseReady } from './firebase'
+import { generateSyncCode, isValidSyncCode, pushSync, subscribeSync } from './sync'
 
 type Tab = 'home' | 'schedule' | 'members' | 'consultations' | 'attendance' | 'payments'
 type MemberStatus = 'active' | 'prospect' | 'waitlist'
@@ -92,6 +95,17 @@ type Member = {
 
 type AttendanceBook = Record<string, AttendanceStatus>
 
+type SyncStatus = 'off' | 'connecting' | 'live' | 'error'
+type SyncControls = {
+  ready: boolean
+  demo: boolean
+  code: string
+  status: SyncStatus
+  onStart: () => void
+  onConnect: (code: string) => void
+  onDisconnect: () => void
+}
+
 const weekdays = ['일', '월', '화', '수', '목', '금', '토']
 const today = new Date()
 const todayKey = toDateKey(today)
@@ -99,6 +113,36 @@ const todayKey = toDateKey(today)
 const storageKey = 'line-dance-manager-v3'
 const backupKey = 'line-dance-backup-at'
 const smsTemplateKey = 'line-dance-sms-templates'
+// 기기 동기화 코드(연결된 경우)를 이 기기에 기억해 둔다
+const syncCodeKey = 'line-dance-sync-code'
+// 동기화 이력(미전송 편집 여부, 마지막 편집/동기화 시각)을 이 기기에 기억해 둔다
+const syncMetaKey = 'line-dance-sync-meta'
+// 기기 시계 오차 허용치: 이보다 더 오래된 원격 데이터만 '과거로의 회귀'로 판정한다
+const clockSkewMs = 5 * 60 * 1000
+
+type SyncMeta = {
+  // 아직 서버에 확정 저장되지 못한 로컬 편집이 있는지 (탭이 닫혀도 기억되어 다음 접속 때 복구)
+  dirty: boolean
+  lastLocalEditAt: number
+  lastSyncedAt: number
+}
+
+function loadSyncMeta(): SyncMeta {
+  const fallback: SyncMeta = { dirty: false, lastLocalEditAt: 0, lastSyncedAt: 0 }
+  if (isDemoMode) return fallback
+  try {
+    const raw = localStorage.getItem(syncMetaKey)
+    if (!raw) return fallback
+    const parsed = JSON.parse(raw) as Partial<SyncMeta>
+    return {
+      dirty: parsed.dirty === true,
+      lastLocalEditAt: typeof parsed.lastLocalEditAt === 'number' ? parsed.lastLocalEditAt : 0,
+      lastSyncedAt: typeof parsed.lastSyncedAt === 'number' ? parsed.lastSyncedAt : 0,
+    }
+  } catch {
+    return fallback
+  }
+}
 
 const defaultSmsTemplates = {
   unpaid: '회원님 안녕하세요~ 수강료 결제일이 지나서 안내드려요. 확인 부탁드립니다 :)',
@@ -505,27 +549,31 @@ function useStoredData() {
   )
   const [attendance, setAttendance] = useState<AttendanceBook>({})
   const [gigs, setGigs] = useState<Gig[]>([])
+  // 저장된 데이터를 불러오는 첫 로드가 끝났는지 (동기화가 '로드'와 '편집'을 구분하는 데 쓴다)
+  const [hydrated, setHydrated] = useState(isDemoMode)
 
   useEffect(() => {
     if (isDemoMode) return
     const raw = localStorage.getItem(storageKey)
-    if (!raw) return
-    try {
-      const saved = JSON.parse(raw) as {
-        members?: LegacyMember[]
-        classes?: DanceClass[]
-        passTemplates?: PassTemplate[]
-        attendance?: AttendanceBook
-        gigs?: Gig[]
+    if (raw) {
+      try {
+        const saved = JSON.parse(raw) as {
+          members?: LegacyMember[]
+          classes?: DanceClass[]
+          passTemplates?: PassTemplate[]
+          attendance?: AttendanceBook
+          gigs?: Gig[]
+        }
+        if (saved.members?.length) setMembers(saved.members.map(normalizeMember))
+        if (saved.classes?.length) setClasses(saved.classes)
+        if (saved.passTemplates?.length) setPassTemplates(saved.passTemplates)
+        if (saved.attendance) setAttendance(saved.attendance)
+        if (saved.gigs?.length) setGigs(saved.gigs)
+      } catch {
+        localStorage.removeItem(storageKey)
       }
-      if (saved.members?.length) setMembers(saved.members.map(normalizeMember))
-      if (saved.classes?.length) setClasses(saved.classes)
-      if (saved.passTemplates?.length) setPassTemplates(saved.passTemplates)
-      if (saved.attendance) setAttendance(saved.attendance)
-      if (saved.gigs?.length) setGigs(saved.gigs)
-    } catch {
-      localStorage.removeItem(storageKey)
     }
+    setHydrated(true)
   }, [])
 
   useEffect(() => {
@@ -540,6 +588,7 @@ function useStoredData() {
     attendance,
     classes,
     gigs,
+    hydrated,
     members,
     passTemplates,
     setAttendance,
@@ -555,6 +604,7 @@ function App() {
     attendance,
     classes,
     gigs,
+    hydrated,
     members,
     passTemplates,
     setAttendance,
@@ -612,6 +662,292 @@ function App() {
       ?.writeText(text)
       .then(() => notify('복사되었습니다'))
       .catch(() => notify('복사에 실패했어요. 문구를 길게 눌러 복사해 주세요.'))
+  }
+
+  // ---------- 기기 동기화 (Firebase Firestore) ----------
+  // 전체 앱 데이터를 JSON 문자열 하나로 /sync/{code} 문서에 저장한다.
+  // 서버가 확정한 스냅샷만 믿고 판단하며, 편집 시각(updatedAt)을 비교해 더 최신 쪽이
+  // 이긴다(last-write-wins). 미전송 편집은 dirty 기록으로 남겨 다음 접속 때 복구한다.
+  const syncJson = JSON.stringify({ attendance, classes, gigs, members, passTemplates })
+  const [syncCode, setSyncCode] = useState(() =>
+    isDemoMode ? '' : localStorage.getItem(syncCodeKey) ?? '',
+  )
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('off')
+  // 구독 오류 시 5초 뒤 재구독을 일으키는 카운터
+  const [syncRetryTick, setSyncRetryTick] = useState(0)
+  // 구독 콜백에서 최신 로컬 데이터를 읽기 위한 참조
+  const syncJsonRef = useRef(syncJson)
+  useEffect(() => {
+    syncJsonRef.current = syncJson
+  }, [syncJson])
+  // 구독 콜백에서 최신 notify를 부르기 위한 참조 (의존성에 넣으면 매 렌더 재구독되므로)
+  const notifyRef = useRef(notify)
+  useEffect(() => {
+    notifyRef.current = notify
+  })
+  // 서버와 마지막으로 맞춰진 JSON (null이면 아직 기준선이 없어 업로드를 보류한다)
+  const lastSyncedJsonRef = useRef<string | null>(null)
+  // 편집 감지용 기준선: 저장 데이터의 첫 로드와 실제 사용자 편집을 구분한다
+  const editBaselineRef = useRef<string | null>(null)
+  // 이 세션에서 사용자가 직접 입력해 연결한 코드인지 (오타로 빈 공유를 시작하는 사고 방지)
+  const enteredCodeRef = useRef(false)
+  // 업로드 디바운스 타이머 (원격 스냅샷이 일으키는 리렌더에 취소되지 않도록 ref로 관리)
+  const pushTimerRef = useRef<number | null>(null)
+  // 동기화 이력 (localStorage에 유지)
+  const [initialSyncMeta] = useState(loadSyncMeta)
+  const syncMetaRef = useRef(initialSyncMeta)
+
+  const persistSyncMeta = useCallback(() => {
+    if (isDemoMode) return
+    localStorage.setItem(syncMetaKey, JSON.stringify(syncMetaRef.current))
+  }, [])
+
+  const clearPushTimer = useCallback(() => {
+    if (pushTimerRef.current !== null) {
+      window.clearTimeout(pushTimerRef.current)
+      pushTimerRef.current = null
+    }
+  }, [])
+
+  // 현재 로컬 데이터를 즉시 업로드한다. updatedAt은 호출 시각으로 기록되므로,
+  // 오프라인에서 큐잉된 쓰기가 뒤늦게 도착해도 수신 기기가 과거 데이터로 판별할 수 있다.
+  const pushSyncNow = useCallback(
+    (code: string) => {
+      clearPushTimer()
+      const json = syncJsonRef.current
+      const at = Date.now()
+      lastSyncedJsonRef.current = json
+      editBaselineRef.current = json
+      syncMetaRef.current.dirty = true
+      persistSyncMeta()
+      pushSync(code, json, at)
+        .then(() => {
+          // 서버가 확정해 준 뒤에만 '전송 완료'로 기록한다
+          syncMetaRef.current.lastSyncedAt = Math.max(syncMetaRef.current.lastSyncedAt, at)
+          if (syncJsonRef.current === json) syncMetaRef.current.dirty = false
+          persistSyncMeta()
+        })
+        .catch(() => setSyncStatus('error'))
+    },
+    [clearPushTimer, persistSyncMeta],
+  )
+
+  // 원격 → 로컬 (실시간 구독). 오류 시 5초 뒤 자동 재구독한다.
+  useEffect(() => {
+    if (isDemoMode || !firebaseReady || !syncCode) {
+      setSyncStatus('off')
+      return
+    }
+
+    function applyRemoteData(json: string, updatedAt: number) {
+      try {
+        const parsed = JSON.parse(json) as {
+          members?: LegacyMember[]
+          classes?: DanceClass[]
+          passTemplates?: PassTemplate[]
+          attendance?: AttendanceBook
+          gigs?: Gig[]
+        }
+        // syncJson과 같은 키 순서·같은 객체로 직렬화해 다음 렌더의 syncJson과 정확히
+        // 일치시킨다 (어긋나면 방금 받은 데이터를 곧바로 되올리는 왕복이 생긴다)
+        const next = {
+          attendance: parsed.attendance ?? {},
+          classes: parsed.classes ?? [],
+          gigs: parsed.gigs ?? [],
+          members: (parsed.members ?? []).map(normalizeMember),
+          passTemplates: parsed.passTemplates ?? [],
+        }
+        setMembers(next.members)
+        setClasses(next.classes)
+        setPassTemplates(next.passTemplates)
+        setAttendance(next.attendance)
+        setGigs(next.gigs)
+        clearPushTimer()
+        const serialized = JSON.stringify(next)
+        lastSyncedJsonRef.current = serialized
+        editBaselineRef.current = serialized
+        syncMetaRef.current = {
+          dirty: false,
+          lastLocalEditAt: 0,
+          lastSyncedAt: Math.max(syncMetaRef.current.lastSyncedAt, updatedAt),
+        }
+        persistSyncMeta()
+      } catch {
+        // 잘못된 원격 데이터는 무시한다
+      }
+    }
+
+    setSyncStatus('connecting')
+    let retryTimer: number | null = null
+    const unsubscribe = subscribeSync(
+      syncCode,
+      (snap) => {
+        // 서버가 확정하지 않은(캐시·전송 대기) 스냅샷으로는 아무것도 판단하지 않는다
+        if (!snap.confirmed) return
+        setSyncStatus('live')
+        if (snap.json === null) {
+          if (enteredCodeRef.current) {
+            // 사용자가 입력한 코드인데 서버에 데이터가 없다 → 오타일 가능성이 높으니
+            // 빈 문서를 만들지 말고 연결을 되돌린다
+            enteredCodeRef.current = false
+            localStorage.removeItem(syncCodeKey)
+            localStorage.removeItem(syncMetaKey)
+            setSyncCode('')
+            notifyRef.current('이 코드로 저장된 데이터가 없어요. 코드를 다시 확인해 주세요.')
+            return
+          }
+          // 이 기기에서 만든 코드 → 이 기기 데이터가 시작점이 된다
+          pushSyncNow(syncCode)
+          return
+        }
+        enteredCodeRef.current = false
+        if (snap.json === lastSyncedJsonRef.current) {
+          // 우리가 올린 데이터의 메아리 → 동기화 시각만 기록
+          syncMetaRef.current.lastSyncedAt = Math.max(
+            syncMetaRef.current.lastSyncedAt,
+            snap.updatedAt,
+          )
+          persistSyncMeta()
+          return
+        }
+        if (snap.updatedAt < syncMetaRef.current.lastSyncedAt - clockSkewMs) {
+          // 원격이 우리가 이미 본 상태보다 한참 과거로 돌아갔다 (다른 기기의 오프라인
+          // 쓰기가 뒤늦게 도착한 경우) → 우리 쪽 최신 데이터로 복원한다
+          pushSyncNow(syncCode)
+          return
+        }
+        if (syncMetaRef.current.dirty && syncMetaRef.current.lastLocalEditAt > snap.updatedAt) {
+          // 아직 전송하지 못한 우리 편집이 원격보다 최신 → 우리 편집을 올린다
+          pushSyncNow(syncCode)
+          return
+        }
+        applyRemoteData(snap.json, snap.updatedAt)
+      },
+      () => {
+        setSyncStatus('error')
+        retryTimer = window.setTimeout(() => setSyncRetryTick((tick) => tick + 1), 5000)
+      },
+    )
+    return () => {
+      if (retryTimer !== null) window.clearTimeout(retryTimer)
+      unsubscribe()
+    }
+    // useState의 setter들은 항상 동일한 함수라 재구독을 일으키지 않는다
+  }, [
+    syncCode,
+    syncRetryTick,
+    clearPushTimer,
+    persistSyncMeta,
+    pushSyncNow,
+    setAttendance,
+    setClasses,
+    setGigs,
+    setMembers,
+    setPassTemplates,
+  ])
+
+  // 로컬 편집 감지: 연결 상태와 무관하게 '미전송 편집 있음'을 기기에 기억해 둔다.
+  // 오프라인에서 편집하고 앱을 닫아도 이 기록의 시각 비교로 다음 접속 때 복구된다.
+  useEffect(() => {
+    if (isDemoMode || !firebaseReady || !syncCode || !hydrated) return
+    if (editBaselineRef.current === null) {
+      // 하이드레이션 직후의 첫 값은 저장돼 있던 데이터이지 편집이 아니다
+      editBaselineRef.current = syncJson
+      return
+    }
+    if (syncJson === editBaselineRef.current) return
+    editBaselineRef.current = syncJson
+    syncMetaRef.current.dirty = true
+    syncMetaRef.current.lastLocalEditAt = Date.now()
+    persistSyncMeta()
+  }, [syncJson, syncCode, hydrated, persistSyncMeta])
+
+  // 로컬 → 원격 (변경 시 0.6초 디바운스 후 업로드)
+  // 첫 서버 확정 스냅샷을 받기 전에는 업로드하지 않는다 — 연결 직후 로컬 데이터가
+  // 원격 데이터를 덮어쓰는 사고를 막는다.
+  useEffect(() => {
+    if (isDemoMode || !firebaseReady || !syncCode || syncStatus !== 'live') return
+    if (lastSyncedJsonRef.current === null || syncJson === lastSyncedJsonRef.current) return
+    clearPushTimer()
+    pushTimerRef.current = window.setTimeout(() => {
+      pushTimerRef.current = null
+      pushSyncNow(syncCode)
+    }, 600)
+  }, [syncJson, syncCode, syncStatus, clearPushTimer, pushSyncNow])
+
+  // 앱 전환·탭 닫기 직전, 디바운스 대기 중인 변경을 즉시 밀어 넣는다 (최선의 시도).
+  // 실패해도 dirty 기록이 남아 있어 다음 접속 때 복구된다.
+  useEffect(() => {
+    if (isDemoMode || !firebaseReady || !syncCode) return
+    const flush = () => {
+      if (pushTimerRef.current !== null) pushSyncNow(syncCode)
+    }
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') flush()
+    }
+    window.addEventListener('pagehide', flush)
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => {
+      window.removeEventListener('pagehide', flush)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
+  }, [syncCode, pushSyncNow])
+
+  const resetSyncTracking = useCallback(() => {
+    clearPushTimer()
+    lastSyncedJsonRef.current = null
+    editBaselineRef.current = null
+    syncMetaRef.current = { dirty: false, lastLocalEditAt: 0, lastSyncedAt: 0 }
+    persistSyncMeta()
+  }, [clearPushTimer, persistSyncMeta])
+
+  function startSync() {
+    // 새 코드의 원격 문서는 비어 있으므로, 첫 스냅샷에서 이 기기 데이터가 시작점으로 올라간다
+    const code = generateSyncCode()
+    enteredCodeRef.current = false
+    resetSyncTracking()
+    localStorage.setItem(syncCodeKey, code)
+    setSyncCode(code)
+    notify('동기화 코드를 만들었어요. 다른 기기에 입력하세요.')
+  }
+
+  function connectSync(rawCode: string) {
+    const code = rawCode.trim().toLowerCase()
+    if (!isValidSyncCode(code)) {
+      notify('코드는 영문·숫자 20자 이상이어야 해요')
+      return
+    }
+    if (code === syncCode) {
+      notify('이미 이 코드로 연결돼 있어요')
+      return
+    }
+    const hasData =
+      members.length > 0 ||
+      classes.length > 0 ||
+      passTemplates.length > 0 ||
+      gigs.length > 0 ||
+      Object.keys(attendance).length > 0
+    if (!isDemoMode && hasData) {
+      const ok = window.confirm(
+        '이 기기의 데이터가 동기화 코드의 데이터로 바뀔 수 있어요. 계속할까요?',
+      )
+      if (!ok) return
+    }
+    enteredCodeRef.current = true
+    resetSyncTracking()
+    localStorage.setItem(syncCodeKey, code)
+    setSyncCode(code)
+    notify('기기 동기화를 연결했어요')
+  }
+
+  function disconnectSync() {
+    enteredCodeRef.current = false
+    resetSyncTracking()
+    localStorage.removeItem(syncCodeKey)
+    localStorage.removeItem(syncMetaKey)
+    setSyncCode('')
+    setSyncStatus('off')
+    notify('기기 동기화를 해제했어요')
   }
 
   useEffect(() => {
@@ -1406,6 +1742,15 @@ function App() {
           onSaveSmsTemplates={saveSmsTemplates}
           setTab={setTab}
           smsTemplates={smsTemplates}
+          sync={{
+            code: syncCode,
+            demo: isDemoMode,
+            onConnect: connectSync,
+            onDisconnect: disconnectSync,
+            onStart: startSync,
+            ready: firebaseReady && !isDemoMode,
+            status: syncStatus,
+          }}
           todayClasses={todayClasses}
           unpaidItems={unpaidItems}
         />
@@ -1550,6 +1895,7 @@ function HomeView({
   onSaveSmsTemplates,
   setTab,
   smsTemplates,
+  sync,
   todayClasses,
   unpaidItems,
 }: {
@@ -1566,6 +1912,7 @@ function HomeView({
   onSaveSmsTemplates: (formData: FormData) => void
   setTab: (tab: Tab) => void
   smsTemplates: SmsTemplates
+  sync: SyncControls
   todayClasses: DanceClass[]
   unpaidItems: Array<{ member: Member; enrollment: Enrollment }>
 }) {
@@ -1764,8 +2111,9 @@ function HomeView({
         </summary>
         <div className="drawerBody">
           <p className="hint ruleHint">
-            모든 데이터는 이 기기에만 저장됩니다. 복원용 백업은 이 앱에 다시 불러올 수 있고,
-            엑셀 파일은 회원 명단을 공유하거나 컴퓨터에서 볼 때 사용해요.
+            데이터는 이 기기에 저장돼요 (기기 동기화를 연결하면 연결된 기기에도 함께
+            저장돼요). 복원용 백업은 이 앱에 다시 불러올 수 있고, 엑셀 파일은 회원 명단을
+            공유하거나 컴퓨터에서 볼 때 사용해요.
           </p>
           <div className="split backupActions">
             <button type="button" className="secondaryButton" onClick={onExport}>
@@ -1789,7 +2137,91 @@ function HomeView({
           </div>
         </div>
       </details>
+
+      <SyncDrawer sync={sync} onCopy={onCopyText} />
     </section>
+  )
+}
+
+function SyncDrawer({ sync, onCopy }: { sync: SyncControls; onCopy: (text: string) => void }) {
+  const statusLabel = !sync.code
+    ? '연결 안 됨'
+    : sync.status === 'live'
+      ? '실시간 동기화 중'
+      : sync.status === 'connecting'
+        ? '연결 중…'
+        : sync.status === 'error'
+          ? '연결 오류 (잠시 후 자동 재시도)'
+          : '대기 중'
+
+  return (
+    <details className="formDrawer syncDrawer">
+      <summary>
+        <span>
+          <strong>기기 동기화</strong>
+          <small>{statusLabel}</small>
+        </span>
+        <i className="drawerIcon static" aria-hidden="true">
+          <RefreshCw size={16} />
+        </i>
+      </summary>
+      <div className="drawerBody">
+        {!sync.ready ? (
+          <p className="hint ruleHint">
+            {sync.demo
+              ? '데모 모드에서는 기기 동기화를 사용할 수 없어요. 실제 모드에서 이용해 주세요.'
+              : '아직 동기화 서버가 설정되지 않았어요. 설정을 마치면 폰과 PC에서 같은 데이터를 실시간으로 함께 볼 수 있어요. 지금은 이 기기에만 저장돼요.'}
+          </p>
+        ) : !sync.code ? (
+          <>
+            <p className="hint ruleHint">
+              폰과 PC에서 같은 데이터를 보려면, 한 기기에서 코드를 만들고 다른 기기에 그 코드를
+              입력하세요.
+            </p>
+            <button type="button" className="primaryButton" onClick={sync.onStart}>
+              이 기기에서 동기화 코드 만들기
+            </button>
+            <form
+              className="split syncConnectForm"
+              onSubmit={(event) => {
+                event.preventDefault()
+                const input = event.currentTarget.elements.namedItem('code') as HTMLInputElement
+                sync.onConnect(input.value)
+                input.value = ''
+              }}
+            >
+              <input
+                name="code"
+                type="text"
+                autoComplete="off"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                placeholder="다른 기기의 코드 입력"
+              />
+              <button type="submit" className="secondaryButton">
+                연결
+              </button>
+            </form>
+          </>
+        ) : (
+          <>
+            <p className="hint ruleHint">
+              이 코드를 다른 기기의 "코드 입력"에 넣으면 같은 데이터를 실시간으로 함께 봐요.
+            </p>
+            <div className="syncCodeRow">
+              <code className="syncCode">{sync.code}</code>
+              <button type="button" className="secondaryButton" onClick={() => onCopy(sync.code)}>
+                코드 복사
+              </button>
+            </div>
+            <button type="button" className="secondaryButton" onClick={sync.onDisconnect}>
+              동기화 해제
+            </button>
+          </>
+        )}
+      </div>
+    </details>
   )
 }
 

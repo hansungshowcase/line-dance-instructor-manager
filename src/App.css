@@ -2595,6 +2595,59 @@ button {
   display: none;
 }
 
+/* ---------- 기기 동기화 ---------- */
+
+/* .formDrawer form 공통 스타일(구분선·패딩·배경)을 상속받지 않는 서랍 안 인라인 폼 */
+.syncDrawer form.syncConnectForm {
+  margin-top: 10px;
+  border-top: 0;
+  padding: 0;
+  background: transparent;
+  grid-template-columns: 1fr auto;
+}
+
+.syncConnectForm input {
+  min-width: 0;
+  min-height: 52px;
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: white;
+  color: var(--ink);
+  font-size: 16px;
+}
+
+.syncDrawer .primaryButton,
+.syncDrawer .secondaryButton {
+  padding: 0 18px;
+}
+
+.syncDrawer .primaryButton,
+.syncDrawer .drawerBody > .secondaryButton {
+  width: 100%;
+}
+
+.syncCodeRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.syncCode {
+  flex: 1;
+  min-width: 0;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--primary-soft);
+  color: var(--primary-deep);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  word-break: break-all;
+}
+
 /* ---------- 완료 알림 토스트 ---------- */
 
 .toast {

@@ -1,0 +1,18 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 기기 동기화 문서: 동기화 코드가 20자 이상일 때만 접근 허용.
+    // 코드는 앱에서 무작위 20자 이상 영숫자로 생성되며(추측 사실상 불가능),
+    // 코드를 아는 기기끼리만 데이터를 공유한다.
+    match /sync/{code} {
+      // 문서 단건 조회만 허용하고 컬렉션 훑기(list)는 막는다
+      allow get: if code.size() >= 20;
+      // 문서 형태를 고정해 임의 필드·타입 쓰기를 막는다 (삭제는 불허)
+      allow create, update: if code.size() >= 20
+        && request.resource.data.keys().hasOnly(['data', 'updatedAt'])
+        && request.resource.data.data is string
+        && request.resource.data.updatedAt is number;
+    }
+  }
+}
