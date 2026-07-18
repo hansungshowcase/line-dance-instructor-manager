@@ -2461,6 +2461,24 @@ button {
   font-weight: 600;
 }
 
+/* 이력 10개씩 더 보기 */
+.historyMoreButton {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 8px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* 이력 수강권 필터 칩 */
+.historyDetails .historyPassChips {
+  margin: 8px 0 0;
+}
+
 .paymentLogRow {
   display: flex;
   align-items: center;
@@ -2613,6 +2631,88 @@ button {
   background: white;
   color: var(--danger);
   font-weight: 700;
+}
+
+/* 받아야 할 회비: 회원별 미수금 한 줄 — 누르면 그 회원의 결제 카드로 이동 */
+.dueRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  border: 1px solid rgba(224, 73, 47, 0.25);
+  border-radius: var(--radius-sm);
+  background: var(--danger-soft);
+  padding: 11px 13px;
+  text-align: left;
+}
+
+.dueRow strong {
+  flex: 0 0 auto;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.dueRow small {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--sub);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.dueRow b {
+  flex: 0 0 auto;
+  color: var(--danger);
+  font-size: 14px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 월별 수입 (회비 + 외부 강의) */
+.monthIncomeRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: white;
+  padding: 11px 13px;
+}
+
+.monthIncomeRow strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.monthIncomeRow small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.monthIncomeRow > b {
+  flex: 0 0 auto;
+  font-size: 14px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 수납 내역 기간 합계 */
+.logTotal {
+  margin: 0 0 10px;
+}
+
+.logTotal b {
+  color: var(--ink);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
 }
 
 .privateActions {

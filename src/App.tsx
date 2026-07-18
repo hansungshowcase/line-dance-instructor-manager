@@ -309,6 +309,12 @@ function timeFromMinutes(totalMinutes: number) {
   return `${String(Math.floor(bounded / 60)).padStart(2, '0')}:${String(bounded % 60).padStart(2, '0')}`
 }
 
+// 'YYYY-MM-DD' 문자열의 요일 (시간대 문제를 피하려고 직접 파싱)
+function weekdayOfDateKey(dateKey: string) {
+  const [year, month, day] = dateKey.split('-').map(Number)
+  return new Date(year || 2026, (month || 1) - 1, day || 1).getDay()
+}
+
 // 개인레슨은 시간표에서 직접 관리하고, 수업 관리 목록에는 그룹 수업만 둔다
 function isPrivateClass(danceClass: DanceClass) {
   return danceClass.location === '개인레슨' || danceClass.name.includes('개인레슨')
@@ -2346,7 +2352,7 @@ function App() {
           classMembers={classMembers}
           classes={classes}
           onMarkAllPresent={markAllPresent}
-          selectedClass={selectedClass}
+          passTemplates={passTemplates}
           selectedClassId={selectedClass?.id ?? selectedClassId}
           setAttendanceDate={setAttendanceDate}
           setAttendanceStatus={setAttendanceStatus}
@@ -4940,7 +4946,7 @@ function AttendanceView({
   classMembers,
   classes,
   onMarkAllPresent,
-  selectedClass,
+  passTemplates,
   selectedClassId,
   setAttendanceDate,
   setAttendanceStatus,
@@ -4952,13 +4958,76 @@ function AttendanceView({
   classMembers: Member[]
   classes: DanceClass[]
   onMarkAllPresent: () => void
-  selectedClass: DanceClass | undefined
+  passTemplates: PassTemplate[]
   selectedClassId: string
   setAttendanceDate: (date: string) => void
   setAttendanceStatus: (memberId: string, status: AttendanceStatus) => void
   setSelectedClassId: (classId: string) => void
 }) {
   const [statSearch, setStatSearch] = useState('')
+  // 출석 체크는 수강권을 먼저 고르고 → 날짜를 고르는 흐름.
+  // 수업(classId)은 수강권+날짜에서 자동으로 정해진다 (여러 개면 선택란 표시)
+  const [selectedPassId, setSelectedPassId] = useState('')
+
+  // 수업이 어느 수강권 소속인지 찾는다. 개인레슨 1회성 수업은 수강권에 직접 연결이
+  // 없으므로 회원의 개인레슨 수강권(enrollment) 배정을 보고 찾는다.
+  function passIdForClass(classId: string): string {
+    const direct = passTemplates.find((pass) => pass.classIds.includes(classId))
+    if (direct) return direct.id
+    const danceClass = classes.find((item) => item.id === classId)
+    if (danceClass && isPrivateClass(danceClass)) {
+      const privatePass = passTemplates.find(
+        (pass) =>
+          pass.type === 'private' &&
+          allMembers.some((member) =>
+            member.enrollments.some(
+              (enrollment) =>
+                enrollment.passName === pass.name && enrollment.classIds.includes(classId),
+            ),
+          ),
+      )
+      if (privatePass) return privatePass.id
+    }
+    return '__etc'
+  }
+
+  // 어떤 수강권에도 속하지 않는 수업 (예전 데이터·수강권 미지정) → '기타 수업'으로 접근
+  const unownedClasses = classes.filter((item) => passIdForClass(item.id) === '__etc')
+  const derivedPassId =
+    selectedPassId ||
+    (selectedClassId ? passIdForClass(selectedClassId) : '') ||
+    passTemplates[0]?.id ||
+    (unownedClasses.length ? '__etc' : '')
+  const currentPass = passTemplates.find((pass) => pass.id === derivedPassId)
+  const selectedWeekday = weekdayOfDateKey(attendanceDate)
+
+  // 선택한 수강권 + 날짜에서 출석 체크할 수 있는 수업 후보
+  const candidates =
+    derivedPassId === '__etc'
+      ? unownedClasses.filter((item) => !item.date || item.date === attendanceDate)
+      : currentPass
+        ? currentPass.type === 'private'
+          ? classes.filter(
+              (item) =>
+                isPrivateClass(item) &&
+                item.date === attendanceDate &&
+                passIdForClass(item.id) === currentPass.id,
+            )
+          : classes.filter((item) => currentPass.classIds.includes(item.id))
+        : []
+  const activeClass = candidates.find((item) => item.id === selectedClassId)
+
+  // 수강권·날짜가 바뀌면 그 요일의 수업을 자동 선택한다
+  useEffect(() => {
+    if (!candidates.length) return
+    const preferred =
+      candidates.find((item) => !item.date && item.weekday === selectedWeekday) ??
+      candidates.find((item) => item.id === selectedClassId) ??
+      candidates[0]
+    if (preferred.id !== selectedClassId) setSelectedClassId(preferred.id)
+    // 수강권·날짜 변경 시에만 자동 선택 (사용자가 고른 수업을 덮어쓰지 않도록)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [derivedPassId, attendanceDate, classes.length])
   const monthKey = todayKey.slice(0, 7)
   const memberStats = allMembers
     .filter((member) =>
@@ -5002,6 +5071,20 @@ function AttendanceView({
       <section className="panel">
         <h2>출석 체크</h2>
         <div className="formGrid compact">
+        <Field label="수강권 (수강권 관리에서 만든 것)">
+          <select
+            value={derivedPassId}
+            onChange={(event) => setSelectedPassId(event.target.value)}
+            aria-label="수강권 선택"
+          >
+            {passTemplates.map((pass) => (
+              <option value={pass.id} key={pass.id}>
+                {pass.name}
+              </option>
+            ))}
+            {unownedClasses.length > 0 && <option value="__etc">기타 수업</option>}
+          </select>
+        </Field>
         <Field label="날짜 (‹ › 로 하루씩 이동)">
           <div className="dateStepper">
             <button
@@ -5025,38 +5108,57 @@ function AttendanceView({
             </button>
           </div>
         </Field>
-        <Field label="수업">
-          <select value={selectedClassId} onChange={(event) => setSelectedClassId(event.target.value)}>
-            {classes.map((danceClass) => (
-              <option value={danceClass.id} key={danceClass.id}>
-                {danceClass.name}
-              </option>
-            ))}
-          </select>
-        </Field>
+        {candidates.length > 1 && (
+          <Field label="수업">
+            <select
+              value={selectedClassId}
+              onChange={(event) => setSelectedClassId(event.target.value)}
+              aria-label="수업 선택"
+            >
+              {candidates.map((danceClass) => (
+                <option value={danceClass.id} key={danceClass.id}>
+                  {danceClass.date
+                    ? `${danceClass.startTime} ${danceClass.name}`
+                    : `${weekdays[danceClass.weekday]}요일 ${danceClass.startTime} ${danceClass.name}`}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
         </div>
-        {selectedClass && (
+        {activeClass ? (
           <p className="hint">
-            {weekdays[selectedClass.weekday]} {selectedClass.startTime} · {selectedClass.location}
+            {weekdays[activeClass.weekday]} {activeClass.startTime} · {activeClass.location}
+            {!activeClass.date &&
+              activeClass.weekday !== selectedWeekday &&
+              ' · 이 날짜는 수업 요일이 아니에요'}
+          </p>
+        ) : (
+          <p className="hint">
+            {currentPass?.type === 'private'
+              ? '이 날짜에 만든 개인레슨이 없어요. 시간표에서 레슨을 먼저 추가해 주세요.'
+              : '이 수강권에 연결된 수업이 없어요.'}
           </p>
         )}
-        <div className="attendanceSummary">
-          <span className="ok">출석 {summary.present}</span>
-          <span className="danger">결석 {summary.absent}</span>
-          <span>미체크 {summary.unchecked}</span>
-        </div>
+        {activeClass && (
+          <div className="attendanceSummary">
+            <span className="ok">출석 {summary.present}</span>
+            <span className="danger">결석 {summary.absent}</span>
+            <span>미체크 {summary.unchecked}</span>
+          </div>
+        )}
         <p className="hint ruleHint">출석 체크 = 해당 수강권 1회 차감 (되돌리면 복구)</p>
       </section>
 
       <section className="panel">
         <h2>수강 회원</h2>
-        {summary.unchecked > 0 && (
+        {activeClass && summary.unchecked > 0 && (
           <button type="button" className="markAllButton" onClick={onMarkAllPresent}>
             미체크 {summary.unchecked}명 전체 출석 처리
           </button>
         )}
         <div className="listStack">
-          {classMembers.map((member) => {
+          {(activeClass ? classMembers : []).map((member) => {
             const status = attendance[attendanceKey(attendanceDate, selectedClassId, member.id)]
             const enrollment = enrollmentForClass(member, selectedClassId)
             return (
@@ -5087,7 +5189,13 @@ function AttendanceView({
               </article>
             )
           })}
-          {!classMembers.length && <p className="emptyText">이 수업반에 배정된 회원이 없습니다.</p>}
+          {(!activeClass || !classMembers.length) && (
+            <p className="emptyText">
+              {activeClass
+                ? '이 수업반에 배정된 회원이 없습니다.'
+                : '위에서 수강권과 날짜를 선택해 주세요.'}
+            </p>
+          )}
         </div>
       </section>
 
@@ -5141,38 +5249,18 @@ function AttendanceView({
                   <b>{lastPresent ? `최근 ${lastPresent.slice(5).replace('-', '/')}` : '기록 없음'}</b>
                 </div>
               {records.length > 0 && (
-                <details className="historyDetails">
-                  <summary>날짜별 이력 보기 ({records.length}건)</summary>
-                  <p className="hint historyHint">누르면 그 날짜 출석부로 이동해요.</p>
-                  <ul>
-                    {records.slice(0, 12).map((record) => {
-                      const recordClass = classes.find(
-                        (danceClass) => danceClass.id === record.classId,
-                      )
-                      return (
-                        <li key={`${record.date}-${record.classId}`}>
-                          <button
-                            type="button"
-                            disabled={!recordClass}
-                            onClick={() => {
-                              if (!recordClass) return
-                              setSelectedClassId(record.classId)
-                              setAttendanceDate(record.date)
-                              window.scrollTo({ behavior: 'smooth', top: 0 })
-                            }}
-                          >
-                            <span>{record.date}</span>
-                            <em>{recordClass?.name ?? '삭제된 수업'}</em>
-                            <b className={`state-${record.status}`}>
-                              {attendanceLabel(record.status)}
-                            </b>
-                          </button>
-                        </li>
-                      )
-                    })}
-                    {records.length > 12 && <li className="moreRecords">외 {records.length - 12}건</li>}
-                  </ul>
-                </details>
+                <AttendanceHistoryDetails
+                  classes={classes}
+                  member={member}
+                  passTemplates={passTemplates}
+                  records={records}
+                  onJump={(classId, date) => {
+                    setSelectedPassId(passIdForClass(classId))
+                    setSelectedClassId(classId)
+                    setAttendanceDate(date)
+                    window.scrollTo({ behavior: 'smooth', top: 0 })
+                  }}
+                />
               )}
               </div>
             </details>
@@ -5181,6 +5269,115 @@ function AttendanceView({
         </div>
       </section>
     </section>
+  )
+}
+
+// 회원별 날짜별 출석 이력 — 수강권별로 걸러 보고, 10개씩 더 보기로 전체를 볼 수 있다
+function AttendanceHistoryDetails({
+  classes,
+  member,
+  passTemplates,
+  records,
+  onJump,
+}: {
+  classes: DanceClass[]
+  member: Member
+  passTemplates: PassTemplate[]
+  records: Array<{ classId: string; date: string; status: AttendanceStatus }>
+  onJump: (classId: string, date: string) => void
+}) {
+  const [enrollmentFilter, setEnrollmentFilter] = useState('all')
+  const [visibleCount, setVisibleCount] = useState(10)
+
+  // 이 기록이 어느 수강권 것인지: 지금 그 수업이 배정된 수강권 → 없으면(수업이
+  // 지워졌거나 배정이 바뀐 경우) 수강권 템플릿의 수업 목록으로 찾는다
+  function enrollmentIdFor(record: { classId: string }) {
+    const byClass = member.enrollments.find((enrollment) =>
+      enrollment.classIds.includes(record.classId),
+    )
+    if (byClass) return byClass.id
+    const pass = passTemplates.find((item) => item.classIds.includes(record.classId))
+    if (pass) {
+      const byName = member.enrollments.find((enrollment) => enrollment.passName === pass.name)
+      if (byName) return byName.id
+    }
+    return ''
+  }
+
+  const filtered =
+    enrollmentFilter === 'all'
+      ? records
+      : records.filter((record) => enrollmentIdFor(record) === enrollmentFilter)
+  const shown = filtered.slice(0, visibleCount)
+
+  return (
+    <details className="historyDetails">
+      <summary>날짜별 이력 보기 ({records.length}건)</summary>
+      {/* 수강권이 여러 개면 수강권별로 걸러 볼 수 있다 */}
+      {member.enrollments.length > 1 && (
+        <div
+          className="paymentFilters categoryChips historyPassChips"
+          role="tablist"
+          aria-label="수강권별 이력"
+        >
+          <button
+            type="button"
+            className={enrollmentFilter === 'all' ? 'active' : ''}
+            onClick={() => {
+              setEnrollmentFilter('all')
+              setVisibleCount(10)
+            }}
+          >
+            전체
+          </button>
+          {member.enrollments.map((enrollment) => (
+            <button
+              type="button"
+              className={enrollmentFilter === enrollment.id ? 'active' : ''}
+              onClick={() => {
+                setEnrollmentFilter(enrollment.id)
+                setVisibleCount(10)
+              }}
+              key={enrollment.id}
+            >
+              {enrollment.passName}
+            </button>
+          ))}
+        </div>
+      )}
+      <p className="hint historyHint">누르면 그 날짜 출석부로 이동해요.</p>
+      <ul>
+        {shown.map((record) => {
+          const recordClass = classes.find((danceClass) => danceClass.id === record.classId)
+          return (
+            <li key={`${record.date}-${record.classId}`}>
+              <button
+                type="button"
+                disabled={!recordClass}
+                onClick={() => {
+                  if (!recordClass) return
+                  onJump(record.classId, record.date)
+                }}
+              >
+                <span>{record.date}</span>
+                <em>{recordClass?.name ?? '삭제된 수업'}</em>
+                <b className={`state-${record.status}`}>{attendanceLabel(record.status)}</b>
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+      {!filtered.length && <p className="emptyText">이 수강권의 출석 이력이 없어요.</p>}
+      {filtered.length > visibleCount && (
+        <button
+          type="button"
+          className="historyMoreButton"
+          onClick={() => setVisibleCount((current) => current + 10)}
+        >
+          10개 더 보기 (남은 {filtered.length - visibleCount}건)
+        </button>
+      )}
+    </details>
   )
 }
 
@@ -5200,6 +5397,7 @@ function PaymentsView({
   const [statusFilter, setStatusFilter] = useState<PaymentStatus | 'all'>('all')
   const [openEditorId, setOpenEditorId] = useState<string | null>(null)
   const [logMonth, setLogMonth] = useState<'this' | 'last' | 'all'>('this')
+  const [logVisible, setLogVisible] = useState(30)
   const counts = {
     paid: members.filter((member) => memberWorstStatus(member) === 'paid').length,
     soon: members.filter((member) => memberWorstStatus(member) === 'soon').length,
@@ -5240,12 +5438,47 @@ function PaymentsView({
     : 0
   const monthGigs = gigs.filter((gig) => gig.date.startsWith(monthKey))
   const monthGigTotal = monthGigs.reduce((sum, gig) => sum + gig.fee, 0)
+  const lastMonthGigTotal = gigs
+    .filter((gig) => gig.date.startsWith(lastMonthKey))
+    .reduce((sum, gig) => sum + gig.fee, 0)
+  // 받아야 할 회비(미납) 목록 — 많이 밀린 순서
+  const unpaidList = members
+    .flatMap((member) =>
+      member.enrollments
+        .filter((enrollment) => enrollmentStatus(enrollment) === 'unpaid')
+        .map((enrollment) => ({
+          dueDays: daysUntil(enrollment.nextPaymentDue),
+          enrollment,
+          member,
+        })),
+    )
+    .sort(
+      (a, b) =>
+        (a.dueDays ?? 999) - (b.dueDays ?? 999) ||
+        a.member.name.localeCompare(b.member.name, 'ko'),
+    )
+  // 월별 수입 (회비 + 외부 강의) — 최근 6개월
+  const incomeByMonth = new Map<string, { fees: number; gigs: number }>()
+  for (const payment of allPayments) {
+    const key = payment.date.slice(0, 7)
+    const row = incomeByMonth.get(key) ?? { fees: 0, gigs: 0 }
+    row.fees += payment.amount
+    incomeByMonth.set(key, row)
+  }
+  for (const gig of gigs) {
+    const key = gig.date.slice(0, 7)
+    const row = incomeByMonth.get(key) ?? { fees: 0, gigs: 0 }
+    row.gigs += gig.fee
+    incomeByMonth.set(key, row)
+  }
+  const incomeMonths = [...incomeByMonth.keys()].sort((a, b) => b.localeCompare(a)).slice(0, 6)
   const visiblePayments =
     logMonth === 'all'
       ? allPayments
       : allPayments.filter((payment) =>
           payment.date.startsWith(logMonth === 'this' ? monthKey : lastMonthKey),
         )
+  const visibleTotal = visiblePayments.reduce((sum, payment) => sum + payment.amount, 0)
   const visibleMembers = (
     statusFilter === 'all'
       ? members
@@ -5263,20 +5496,63 @@ function PaymentsView({
   return (
     <section className="screen">
       <section className="paymentHero">
-        <p>이번 달 받은 회비{monthCount > 0 && ` (${monthCount}건)`}</p>
-        <strong>{formatCurrency(monthTotal)}</strong>
-        <span>지난달 {formatCurrency(lastMonthTotal)}</span>
-        <span>월 평균 {formatCurrency(monthlyAverage)}</span>
-        {monthGigTotal > 0 && (
-          <span>
-            내 스케줄 수입 {formatCurrency(monthGigTotal)} · {monthGigs.length}회
-          </span>
-        )}
+        <p>이번 달 총 수입 (회비 + 외부 강의)</p>
+        <strong>{formatCurrency(monthTotal + monthGigTotal)}</strong>
+        <span>
+          회비 {formatCurrency(monthTotal)}
+          {monthCount > 0 && ` · ${monthCount}건`}
+        </span>
+        <span>
+          외부 강의 {formatCurrency(monthGigTotal)}
+          {monthGigs.length > 0 && ` · ${monthGigs.length}회`}
+        </span>
+        <span>지난달 총 {formatCurrency(lastMonthTotal + lastMonthGigTotal)}</span>
+        <span>월 평균 회비 {formatCurrency(monthlyAverage)}</span>
         <span>완납 {counts.paid} · 임박 {counts.soon} · 미납 {counts.unpaid}</span>
         {unpaidTotal > 0 && (
-          <span className="heroDanger">밀린 회비 {formatCurrency(unpaidTotal)}</span>
+          <span className="heroDanger">
+            받아야 할 회비 {formatCurrency(unpaidTotal)} · {unpaidList.length}건
+          </span>
         )}
       </section>
+
+      {/* 받아야 할 돈부터 한눈에 — 누르면 그 회원의 결제 카드로 이동 */}
+      {unpaidList.length > 0 && (
+        <section className="panel">
+          <h2>받아야 할 회비</h2>
+          <div className="listStack">
+            {unpaidList.map(({ dueDays, enrollment, member }) => (
+              <button
+                type="button"
+                className="dueRow"
+                onClick={() => {
+                  setStatusFilter('all')
+                  setTimeout(() => {
+                    document
+                      .getElementById(`payment-card-${member.id}`)
+                      ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                  }, 120)
+                }}
+                key={enrollment.id}
+              >
+                <strong>{member.name}</strong>
+                <small>
+                  {enrollment.passName}
+                  {enrollment.totalCredits > 0 && enrollment.remainingCredits <= 0
+                    ? ' · 횟수 소진'
+                    : dueDays !== null && dueDays < 0
+                      ? ` · ${-dueDays}일 지남`
+                      : ''}
+                </small>
+                <b>{formatCurrency(enrollment.paidAmount)}</b>
+              </button>
+            ))}
+          </div>
+          <p className="hint ruleHint">
+            합계 {formatCurrency(unpaidTotal)} · 누르면 아래 그 회원의 결제 카드로 이동해요.
+          </p>
+        </section>
+      )}
 
       <section className="panel">
         <h2>결제와 수강권</h2>
@@ -5297,7 +5573,7 @@ function PaymentsView({
           {visibleMembers.map((member) => {
             const worst = memberWorstStatus(member)
             return (
-              <article className="paymentCard" key={member.id}>
+              <article className="paymentCard" id={`payment-card-${member.id}`} key={member.id}>
                 <div className="paymentHead">
                   <div>
                     <strong>{member.name}</strong>
@@ -5486,15 +5762,23 @@ function PaymentsView({
             <button
               type="button"
               className={logMonth === option.value ? 'active' : ''}
-              onClick={() => setLogMonth(option.value)}
+              onClick={() => {
+                setLogMonth(option.value)
+                setLogVisible(30)
+              }}
               key={option.value}
             >
               {option.label}
             </button>
           ))}
         </div>
+        {visiblePayments.length > 0 && (
+          <p className="hint logTotal">
+            이 기간 합계 <b>{formatCurrency(visibleTotal)}</b> · {visiblePayments.length}건
+          </p>
+        )}
         <div className="listStack">
-          {visiblePayments.slice(0, 30).map((payment) => (
+          {visiblePayments.slice(0, logVisible).map((payment) => (
             <div
               className="paymentLogRow"
               key={`${payment.date}-${payment.memberName}-${payment.passName}-${payment.amount}`}
@@ -5511,7 +5795,42 @@ function PaymentsView({
             <p className="emptyText">이 기간에는 수납 기록이 없습니다.</p>
           )}
         </div>
+        {visiblePayments.length > logVisible && (
+          <button
+            type="button"
+            className="historyMoreButton"
+            onClick={() => setLogVisible((current) => current + 30)}
+          >
+            30개 더 보기 (남은 {visiblePayments.length - logVisible}건)
+          </button>
+        )}
       </section>
+
+      {/* 월별 재무 현황 — 회비·외부 강의를 월 단위로 모아 본다 */}
+      {incomeMonths.length > 0 && (
+        <section className="panel">
+          <h2>월별 수입</h2>
+          <div className="listStack">
+            {incomeMonths.map((key) => {
+              const row = incomeByMonth.get(key) ?? { fees: 0, gigs: 0 }
+              return (
+                <div className="monthIncomeRow" key={key}>
+                  <div>
+                    <strong>
+                      {Number(key.slice(0, 4))}년 {Number(key.slice(5, 7))}월
+                    </strong>
+                    <small>
+                      회비 {formatCurrency(row.fees)} · 외부 강의 {formatCurrency(row.gigs)}
+                    </small>
+                  </div>
+                  <b>{formatCurrency(row.fees + row.gigs)}</b>
+                </div>
+              )
+            })}
+          </div>
+          <p className="hint ruleHint">최근 6개월. 외부 강의는 시간표의 내 스케줄 기준이에요.</p>
+        </section>
+      )}
     </section>
   )
 }

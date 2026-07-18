@@ -174,12 +174,21 @@ test('gig end-time & edit, private lesson quick-add rules, custom waitlist class
   // 개인레슨 카드에는 출석 체크 버튼이 없다 (차감은 출석 탭에서만)
   await expect(privateCard.getByRole('button', { name: /출석/ })).toHaveCount(0)
 
-  // 출석 탭에서 출석 체크 → 잔여 8회에서 7회로 차감
+  // 출석 탭: 수강권을 먼저 고르면 그 수강권의 수업으로 출석 체크 → 잔여 8회에서 7회로 차감
   await page.getByRole('button', { name: '출석', exact: true }).click()
-  await page.locator('.panel select').selectOption({ label: '이정아 개인레슨' })
+  await page.getByLabel('수강권 선택').selectOption({ label: '개인레슨 10회권' })
   const lessonRow = page.locator('.attendanceRow').filter({ hasText: '이정아' })
   await lessonRow.getByRole('button', { name: '출석', exact: true }).click()
   await expect(lessonRow.getByText(/잔여 7\/10회/)).toBeVisible()
+
+  // 수강권별 이력 필터: 이정아는 수강권 2개 → 칩으로 수강권별 이력만 걸러 본다
+  const leeStatEarly = page.locator('.memberStatRow').filter({ hasText: '이정아' })
+  await leeStatEarly.locator('summary.statSummary').click()
+  await leeStatEarly.locator('details.historyDetails summary').click()
+  await leeStatEarly.getByRole('button', { name: '개인레슨 10회권', exact: true }).click()
+  await expect(leeStatEarly.locator('.historyDetails li')).toHaveCount(1)
+  await leeStatEarly.getByRole('button', { name: '중급 라인댄스 10회권', exact: true }).click()
+  await expect(leeStatEarly.getByText('이 수강권의 출석 이력이 없어요.')).toBeVisible()
 
   // ── 시간표에서 레슨을 삭제하면 출석 기록이 없던 일이 되고 잔여도 8회로 복구된다
   await page.getByRole('button', { name: '시간표', exact: true }).click()
@@ -192,6 +201,38 @@ test('gig end-time & edit, private lesson quick-add rules, custom waitlist class
   await expect(
     leeStat.locator('.statPassLine').filter({ hasText: '개인레슨 10회권' }).locator('b'),
   ).toHaveText('잔여 8/10회')
+
+  // 날짜별 이력 10개씩 더 보기: 김미영에게 12일치 출석을 만든다
+  const dateKey = (offset: number) => {
+    const d = new Date()
+    d.setDate(d.getDate() + offset)
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+  }
+  await page.getByLabel('수강권 선택').selectOption({ label: '초급 라인댄스 월수강권' })
+  const dateInput = page.locator('.dateStepper input')
+  for (let offset = 20; offset >= 9; offset--) {
+    await dateInput.fill(dateKey(-offset))
+    await page
+      .locator('.attendanceRow')
+      .filter({ hasText: '김미영' })
+      .getByRole('button', { name: '출석', exact: true })
+      .click()
+  }
+  const kimStat = page.locator('.memberStatRow').filter({ hasText: '김미영' })
+  await kimStat.locator('summary.statSummary').click()
+  await kimStat.locator('details.historyDetails summary').click()
+  await expect(kimStat.locator('.historyDetails li')).toHaveCount(10)
+  await kimStat.getByRole('button', { name: /10개 더 보기/ }).click()
+  await expect(kimStat.locator('.historyDetails li')).toHaveCount(12)
+
+  // ── 결제 탭 재무 현황: 총 수입 히어로 + 받아야 할 회비 목록 (박선희가 미납)
+  await page.getByRole('button', { name: '결제', exact: true }).click()
+  await expect(page.getByText('이번 달 총 수입 (회비 + 외부 강의)')).toBeVisible()
+  await expect(page.getByRole('heading', { name: '받아야 할 회비' })).toBeVisible()
+  const dueRow = page.locator('.dueRow').filter({ hasText: '박선희' })
+  await expect(dueRow).toBeVisible()
+  await expect(page.getByRole('heading', { name: '월별 수입' })).toBeVisible()
 
   // ── 대기 현황: 수강권과 별개인 대기 수업을 직접 만든다
   await page.getByRole('button', { name: '상담', exact: true }).click()
