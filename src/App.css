@@ -1404,6 +1404,32 @@ button {
   font-weight: 600;
 }
 
+/* 대기 수업(수강권과 별개) 삭제 버튼 */
+.waitGroupHead .waitDeleteButton {
+  flex: 0 0 auto;
+  min-height: 40px;
+  border: 1px solid rgba(224, 73, 47, 0.25);
+  border-radius: 999px;
+  background: white;
+  color: var(--danger);
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* 대기 수업 추가 폼 (수업명 + 정원) */
+.waitClassForm {
+  border-top: 1px dashed var(--line-strong);
+  margin-top: 4px;
+  padding-top: 12px;
+}
+
+.waitClassForm .draftFoot {
+  border-top: none;
+  margin-top: 8px;
+  padding-top: 0;
+}
+
 /* 출석 날짜: ‹ › 로 하루씩 이동 */
 .dateStepper {
   display: grid;
@@ -2789,9 +2815,29 @@ button {
   background: var(--warn);
 }
 
-.gigDelete {
-  width: 100%;
-  margin-top: 10px;
+/* 내 스케줄 카드: 수정·삭제 버튼 나란히 */
+.cardActions.gigActions {
+  grid-template-columns: 1fr 1fr;
+}
+
+.gigActions .gigEdit {
+  min-height: 44px;
+  border: 1px solid rgba(192, 127, 20, 0.35);
+  border-radius: var(--radius-sm);
+  background: white;
+  color: var(--warn);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.gigActions .gigDelete {
+  min-height: 44px;
+  border: 1px solid rgba(224, 73, 47, 0.3);
+  border-radius: var(--radius-sm);
+  background: white;
+  color: var(--danger);
+  font-size: 13px;
+  font-weight: 700;
 }
 
 /* 반복 스케줄 삭제: 이 날짜만 / 전체 선택 */
@@ -3228,6 +3274,15 @@ button {
 
 .cardActions:has(.cardEditToggle) {
   grid-template-columns: 1fr 44px;
+}
+
+/* 개인레슨 카드: 출석 체크 대신 안내 문구 (차감은 출석 탭에서만) */
+.privateHint {
+  display: flex;
+  align-items: center;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 /* 개인레슨 시간 변경·삭제를 여는 톱니 버튼 */

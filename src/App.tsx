@@ -51,6 +51,14 @@ type Gig = {
   fee: number
 }
 
+// 대기 현황 전용 수업 — 수강권·시간표와 완전히 별개인 임시 수업.
+// 상담 등록에서 '현재 대기'를 고르면 이 목록에서 대기 수업을 선택한다.
+type WaitlistClass = {
+  id: string
+  name: string
+  capacity: number
+}
+
 type PassTemplate = {
   id: string
   type: LessonType
@@ -690,6 +698,7 @@ function useStoredData() {
   const [attendance, setAttendance] = useState<AttendanceBook>({})
   const [gigs, setGigs] = useState<Gig[]>([])
   const [paymentArchive, setPaymentArchive] = useState<ArchivedPayment[]>([])
+  const [waitlistClasses, setWaitlistClasses] = useState<WaitlistClass[]>([])
   // 저장된 데이터를 불러오는 첫 로드가 끝났는지 (동기화가 '로드'와 '편집'을 구분하는 데 쓴다)
   const [hydrated, setHydrated] = useState(isDemoMode)
 
@@ -705,6 +714,7 @@ function useStoredData() {
           attendance?: AttendanceBook
           gigs?: Gig[]
           paymentArchive?: ArchivedPayment[]
+          waitlistClasses?: WaitlistClass[]
         }
         const loadedMembers = dedupeClassOwnership(
           (saved.members ?? []).map(normalizeMember),
@@ -717,6 +727,7 @@ function useStoredData() {
         if (saved.attendance) setAttendance(saved.attendance)
         if (saved.gigs?.length) setGigs(saved.gigs)
         if (saved.paymentArchive?.length) setPaymentArchive(saved.paymentArchive)
+        if (saved.waitlistClasses?.length) setWaitlistClasses(saved.waitlistClasses)
       } catch {
         localStorage.removeItem(storageKey)
       }
@@ -728,9 +739,17 @@ function useStoredData() {
     if (isDemoMode) return
     localStorage.setItem(
       storageKey,
-      JSON.stringify({ members, classes, passTemplates, attendance, gigs, paymentArchive }),
+      JSON.stringify({
+        members,
+        classes,
+        passTemplates,
+        attendance,
+        gigs,
+        paymentArchive,
+        waitlistClasses,
+      }),
     )
-  }, [members, classes, passTemplates, attendance, gigs, paymentArchive])
+  }, [members, classes, passTemplates, attendance, gigs, paymentArchive, waitlistClasses])
 
   return {
     attendance,
@@ -746,6 +765,8 @@ function useStoredData() {
     setMembers,
     setPassTemplates,
     setPaymentArchive,
+    setWaitlistClasses,
+    waitlistClasses,
   }
 }
 
@@ -764,6 +785,8 @@ function App() {
     setMembers,
     setPassTemplates,
     setPaymentArchive,
+    setWaitlistClasses,
+    waitlistClasses,
   } = useStoredData()
   const [tab, setTab] = useState<Tab>('home')
   const [query, setQuery] = useState('')
@@ -875,6 +898,7 @@ function App() {
     members,
     passTemplates,
     paymentArchive,
+    waitlistClasses,
   })
   const [syncCode, setSyncCode] = useState(() =>
     isDemoMode ? '' : localStorage.getItem(syncCodeKey) ?? '',
@@ -955,6 +979,7 @@ function App() {
           attendance?: AttendanceBook
           gigs?: Gig[]
           paymentArchive?: ArchivedPayment[]
+          waitlistClasses?: WaitlistClass[]
         }
         // syncJson과 같은 키 순서·같은 객체로 직렬화해 다음 렌더의 syncJson과 정확히
         // 일치시킨다 (어긋나면 방금 받은 데이터를 곧바로 되올리는 왕복이 생긴다)
@@ -972,6 +997,7 @@ function App() {
           members: remoteMembers,
           passTemplates: parsed.passTemplates ?? [],
           paymentArchive: parsed.paymentArchive ?? [],
+          waitlistClasses: parsed.waitlistClasses ?? [],
         }
         setMembers(next.members)
         setClasses(next.classes)
@@ -979,6 +1005,7 @@ function App() {
         setAttendance(next.attendance)
         setGigs(next.gigs)
         setPaymentArchive(next.paymentArchive)
+        setWaitlistClasses(next.waitlistClasses)
         clearPushTimer()
         // 기준선은 '서버에 실제로 있던 값'으로 잡는다. 청소·정리로 로컬이 달라졌다면
         // 다음 렌더에서 편집으로 감지되어 정리된 데이터가 자동으로 서버에 올라간다.
@@ -1068,6 +1095,7 @@ function App() {
     setMembers,
     setPassTemplates,
     setPaymentArchive,
+    setWaitlistClasses,
   ])
 
   // 로컬 편집 감지: 연결 상태와 무관하게 '미전송 편집 있음'을 기기에 기억해 둔다.
@@ -1150,6 +1178,7 @@ function App() {
       classes.length > 0 ||
       passTemplates.length > 0 ||
       gigs.length > 0 ||
+      waitlistClasses.length > 0 ||
       Object.keys(attendance).length > 0
     if (!isDemoMode && hasData) {
       const ok = window.confirm(
@@ -1218,13 +1247,13 @@ function App() {
   const activeMembers = members.filter((member) => member.status === 'active')
   const consultationMembers = members.filter((member) => member.status === 'prospect')
   const waitlistMembers = members.filter((member) => member.status === 'waitlist')
-  // 그룹 수강권의 대기자(관심 수업 일치)가 정원을 채우면 개강 알림을 띄운다
-  const waitlistAlerts = passTemplates
-    .filter((pass) => pass.type !== 'private' && pass.capacity > 0)
-    .map((pass) => ({
-      capacity: pass.capacity,
-      count: waitlistMembers.filter((member) => member.interest === pass.name).length,
-      passName: pass.name,
+  // 대기 현황에서 만든 대기 수업의 대기자가 정원을 채우면 개강 알림을 띄운다
+  const waitlistAlerts = waitlistClasses
+    .filter((waitClass) => waitClass.capacity > 0)
+    .map((waitClass) => ({
+      capacity: waitClass.capacity,
+      count: waitlistMembers.filter((member) => member.interest === waitClass.name).length,
+      passName: waitClass.name,
     }))
     .filter((alert) => alert.count >= alert.capacity)
   const todayClasses = classesOnDate(classes, today)
@@ -1637,17 +1666,8 @@ function App() {
       notify('이름과 전화번호를 입력해 주세요')
       return
     }
-    // 관심 수업·유입경로: '기타'를 고르면 직접 입력한 값을 쓴다.
-    // 카테고리 안에서 직접 입력한 경우 카테고리명을 앞에 붙여 기록한다 (예: "라인댄스 · 오전반")
-    const interestChoice = String(formData.get('interestChoice') ?? '')
-    const interestCategory = String(formData.get('interestCategory') ?? '')
-    const interestCustom = String(formData.get('interestCustom') ?? '').trim()
-    const interest =
-      interestChoice === '기타'
-        ? interestCustom && interestCategory && interestCategory !== '기타'
-          ? `${interestCategory} · ${interestCustom}`
-          : interestCustom
-        : interestChoice
+    // '현재 대기'로 등록하면 대기 현황에서 만든 대기 수업 이름이 interest에 담긴다
+    const interest = String(formData.get('interest') ?? '')
     const sourceChoice = String(formData.get('sourceChoice') ?? '')
     const source =
       sourceChoice === '기타' ? String(formData.get('sourceCustom') ?? '').trim() : sourceChoice
@@ -1714,6 +1734,31 @@ function App() {
       ),
     )
     notify('상담 내역이 수정되었습니다')
+  }
+
+  // 대기 현황 전용 수업 추가·삭제 (수강권과 무관)
+  function addWaitlistClass(name: string, capacity: number) {
+    const trimmed = name.trim()
+    if (!trimmed) {
+      notify('대기 수업명을 입력해 주세요')
+      return
+    }
+    if (waitlistClasses.some((waitClass) => waitClass.name === trimmed)) {
+      notify('같은 이름의 대기 수업이 이미 있어요')
+      return
+    }
+    setWaitlistClasses((current) => [
+      ...current,
+      { id: makeId('wait'), name: trimmed, capacity: Math.max(0, capacity) },
+    ])
+    notify('대기 수업이 추가되었습니다')
+  }
+
+  function removeWaitlistClass(waitClassId: string) {
+    setWaitlistClasses((current) =>
+      current.filter((waitClass) => waitClass.id !== waitClassId),
+    )
+    notify('대기 수업이 삭제되었습니다 (대기 회원은 상담 내역에 남아요)')
   }
 
   function markAttendance(
@@ -1829,12 +1874,20 @@ function App() {
     }
   }
 
-  function createSlotClass(dateKey: string, startTime: string, memberIds: string[]) {
+  function createSlotClass(
+    dateKey: string,
+    startTime: string,
+    endTime: string,
+    memberIds: string[],
+  ) {
     const classId = makeId('class')
     const pickedMembers = members.filter((member) => memberIds.includes(member.id))
-    const className =
-      pickedMembers.length === 1 ? `${pickedMembers[0].name} 개인레슨` : '개인레슨'
+    // 2:1·3:1 레슨은 참여 회원 이름을 모두 담는다 (예: "김미영·이정아 개인레슨")
+    const className = pickedMembers.length
+      ? `${pickedMembers.map((member) => member.name).join('·')} 개인레슨`
+      : '개인레슨'
     const startMinutes = minutesFromTime(startTime)
+    const endMinutes = minutesFromTime(endTime)
     const [year, month, day] = dateKey.split('-').map(Number)
     setClasses((current) => [
       {
@@ -1842,7 +1895,10 @@ function App() {
         name: className,
         weekday: new Date(year, month - 1, day).getDay(),
         startTime: timeFromMinutes(startMinutes),
-        endTime: timeFromMinutes(startMinutes + 50),
+        // 종료가 시작보다 빠르면 기본 50분짜리로 만든다
+        endTime: timeFromMinutes(
+          endMinutes > startMinutes ? endMinutes : startMinutes + 50,
+        ),
         location: '개인레슨',
         capacity: Math.max(1, memberIds.length),
         tuitionFee: 0,
@@ -1863,12 +1919,14 @@ function App() {
   function addGig(
     date: string,
     startTime: string,
+    endTime: string,
     name: string,
     fee: number,
     repeatUntil?: string,
     skipHolidays?: boolean,
   ) {
     const startMinutes = minutesFromTime(startTime)
+    const endMinutes = minutesFromTime(endTime)
     // 매주 반복: 시작 날짜부터 종료일까지 같은 요일로 생성 (공휴일 제외 옵션)
     const dates: string[] = []
     const [year, month, day] = date.split('-').map(Number)
@@ -1891,7 +1949,10 @@ function App() {
         id: makeId('gig'),
         date: dateKey,
         startTime: timeFromMinutes(startMinutes),
-        endTime: timeFromMinutes(startMinutes + 50),
+        // 종료가 시작보다 빠르면 기본 50분짜리로 만든다
+        endTime: timeFromMinutes(
+          endMinutes > startMinutes ? endMinutes : startMinutes + 50,
+        ),
         name: name.trim() || '외부 강의',
         fee,
       })),
@@ -1899,6 +1960,42 @@ function App() {
     notify(
       dates.length > 1 ? `${dates.length}회 스케줄이 추가되었습니다` : '내 스케줄이 추가되었습니다',
     )
+  }
+
+  // 내 스케줄(외부 강의) 수정 — applyToSeries면 같은 묶음(같은 이름·시작 시간)의
+  // 이 날짜 이후 반복 전체에 적용한다 (지난 일정은 정산 기록이라 건드리지 않음)
+  function updateGig(
+    gigId: string,
+    data: { endTime: string; fee: number; name: string; startTime: string },
+    applyToSeries: boolean,
+  ) {
+    const target = gigs.find((gig) => gig.id === gigId)
+    if (!target) return
+    const inSeries = (gig: Gig) =>
+      gig.id === gigId ||
+      (applyToSeries &&
+        gig.name === target.name &&
+        gig.startTime === target.startTime &&
+        gig.date >= target.date)
+    const startMinutes = minutesFromTime(data.startTime)
+    const endMinutes = minutesFromTime(data.endTime)
+    const name = data.name.trim() || target.name
+    setGigs((current) =>
+      current.map((gig) =>
+        inSeries(gig)
+          ? {
+              ...gig,
+              name,
+              startTime: timeFromMinutes(startMinutes),
+              endTime: timeFromMinutes(
+                endMinutes > startMinutes ? endMinutes : startMinutes + 50,
+              ),
+              fee: data.fee,
+            }
+          : gig,
+      ),
+    )
+    notify(applyToSeries ? '이후 반복 스케줄이 모두 수정되었습니다' : '스케줄이 수정되었습니다')
   }
 
   function removeGig(gigId: string) {
@@ -1936,16 +2033,62 @@ function App() {
   }
 
   function removeClass(classId: string) {
+    const target = classes.find((danceClass) => danceClass.id === classId)
+    // 개인레슨 삭제 = 수업이 없던 일이 되는 것. 삭제 때문에 횟수가 깎여 있으면 안 되므로
+    // 이 수업의 출석 기록을 지우고, 출석으로 차감됐던 횟수는 되돌린다 (차감은 출석에서만)
+    const refunds = new Map<string, number>()
+    if (target && isPrivateClass(target)) {
+      let hasRecords = false
+      for (const [key, status] of Object.entries(attendance)) {
+        const [, keyClassId, memberId] = key.split('|')
+        if (keyClassId !== classId) continue
+        hasRecords = true
+        if (status === 'present' || status === 'makeup') {
+          refunds.set(memberId, (refunds.get(memberId) ?? 0) + 1)
+        }
+      }
+      if (hasRecords) {
+        setAttendance((current) =>
+          Object.fromEntries(
+            Object.entries(current).filter(([key]) => key.split('|')[1] !== classId),
+          ),
+        )
+      }
+    }
     notify('수업이 삭제되었습니다')
     setClasses((current) => current.filter((danceClass) => danceClass.id !== classId))
     setMembers((current) =>
-      current.map((member) => ({
-        ...member,
-        enrollments: member.enrollments.map((enrollment) => ({
-          ...enrollment,
-          classIds: enrollment.classIds.filter((id) => id !== classId),
-        })),
-      })),
+      current.map((member) => {
+        const refund = refunds.get(member.id) ?? 0
+        let enrollments = member.enrollments
+        if (refund > 0) {
+          // 차감됐던 곳(그 수업이 속한 회수권)에 그대로 되돌린다 — markAttendance와 같은 규칙
+          const countEnrollments = enrollments.filter((e) => e.totalCredits > 0)
+          const refundTarget =
+            countEnrollments.find((e) => e.classIds.includes(classId)) ??
+            (countEnrollments.length === 1 ? countEnrollments[0] : undefined)
+          if (refundTarget) {
+            enrollments = enrollments.map((enrollment) =>
+              enrollment.id === refundTarget.id
+                ? {
+                    ...enrollment,
+                    remainingCredits: Math.min(
+                      enrollment.totalCredits,
+                      enrollment.remainingCredits + refund,
+                    ),
+                  }
+                : enrollment,
+            )
+          }
+        }
+        return {
+          ...member,
+          enrollments: enrollments.map((enrollment) => ({
+            ...enrollment,
+            classIds: enrollment.classIds.filter((id) => id !== classId),
+          })),
+        }
+      }),
     )
     setPassTemplates((current) =>
       current.map((pass) =>
@@ -1980,7 +2123,7 @@ function App() {
 
   function exportData() {
     const payload = JSON.stringify(
-      { members, classes, passTemplates, attendance, gigs, paymentArchive },
+      { members, classes, passTemplates, attendance, gigs, paymentArchive, waitlistClasses },
       null,
       2,
     )
@@ -2075,6 +2218,7 @@ function App() {
           attendance?: AttendanceBook
           gigs?: Gig[]
           paymentArchive?: ArchivedPayment[]
+          waitlistClasses?: WaitlistClass[]
         }
         if (!saved.members?.length && !saved.classes?.length) {
           window.alert('백업 파일 형식이 아닙니다.')
@@ -2092,6 +2236,7 @@ function App() {
         if (saved.attendance) setAttendance(saved.attendance)
         if (saved.gigs?.length) setGigs(saved.gigs)
         if (saved.paymentArchive?.length) setPaymentArchive(saved.paymentArchive)
+        if (saved.waitlistClasses?.length) setWaitlistClasses(saved.waitlistClasses)
         notify('백업 가져오기가 완료되었습니다')
       } catch {
         window.alert('파일을 읽을 수 없습니다. 이 앱에서 내보낸 백업 파일인지 확인해 주세요.')
@@ -2155,6 +2300,8 @@ function App() {
           onRemoveGigSeries={removeGigSeries}
           onSaveAttendance={saveClassAttendance}
           onUpdateClassTime={updateClassTime}
+          onUpdateGig={updateGig}
+          passTemplates={passTemplates}
         />
       )}
       {tab === 'members' && (
@@ -2182,9 +2329,12 @@ function App() {
           consultationMembers={consultationMembers}
           passTemplates={passTemplates}
           onAddConsultation={addConsultation}
+          onAddWaitlistClass={addWaitlistClass}
           onConvertMember={convertToMember}
           onRemoveMember={removeMember}
+          onRemoveWaitlistClass={removeWaitlistClass}
           onUpdateConsultation={updateConsultation}
+          waitlistClasses={waitlistClasses}
           waitlistMembers={waitlistMembers}
         />
       )}
@@ -2730,6 +2880,8 @@ function ScheduleView({
   onRemoveGigSeries,
   onSaveAttendance,
   onUpdateClassTime,
+  onUpdateGig,
+  passTemplates,
 }: {
   attendance: AttendanceBook
   classes: DanceClass[]
@@ -2738,12 +2890,18 @@ function ScheduleView({
   onAddGig: (
     date: string,
     startTime: string,
+    endTime: string,
     name: string,
     fee: number,
     repeatUntil?: string,
     skipHolidays?: boolean,
   ) => void
-  onCreateSlotClass: (dateKey: string, startTime: string, memberIds: string[]) => void
+  onCreateSlotClass: (
+    dateKey: string,
+    startTime: string,
+    endTime: string,
+    memberIds: string[],
+  ) => void
   onRemoveClass: (classId: string) => void
   onRemoveGig: (gigId: string) => void
   onRemoveGigSeries: (gigId: string) => void
@@ -2753,6 +2911,12 @@ function ScheduleView({
     marks: Record<string, AttendanceStatus>,
   ) => void
   onUpdateClassTime: (classId: string, startTime: string) => void
+  onUpdateGig: (
+    gigId: string,
+    data: { endTime: string; fee: number; name: string; startTime: string },
+    applyToSeries: boolean,
+  ) => void
+  passTemplates: PassTemplate[]
 }) {
   const weekDates = getWeekDates(today)
   const [selectedDate, setSelectedDate] = useState(today)
@@ -2924,6 +3088,7 @@ function ScheduleView({
                       }
                       onRemoveGig={onRemoveGig}
                       onRemoveGigSeries={onRemoveGigSeries}
+                      onUpdateGig={onUpdateGig}
                       key={gig.id}
                     />
                   ))}
@@ -2936,14 +3101,15 @@ function ScheduleView({
           )}
           <QuickAddClass
             members={members}
-            onCreate={(startTime, memberIds) =>
-              onCreateSlotClass(selectedDateKey, startTime, memberIds)
+            passTemplates={passTemplates}
+            onCreate={(startTime, endTime, memberIds) =>
+              onCreateSlotClass(selectedDateKey, startTime, endTime, memberIds)
             }
           />
           <QuickAddGig
             baseDateKey={selectedDateKey}
-            onCreate={(startTime, name, fee, repeatUntil, skipHolidays) =>
-              onAddGig(selectedDateKey, startTime, name, fee, repeatUntil, skipHolidays)
+            onCreate={(startTime, endTime, name, fee, repeatUntil, skipHolidays) =>
+              onAddGig(selectedDateKey, startTime, endTime, name, fee, repeatUntil, skipHolidays)
             }
           />
         </div>
@@ -2952,20 +3118,50 @@ function ScheduleView({
   )
 }
 
-// 내 스케줄(외부 강의) 카드. 매주 반복으로 만든 스케줄이면 삭제 시
-// "이 날짜만 / 반복 전체" 를 선택하게 한다.
+// 내 스케줄(외부 강의) 카드. 수정 버튼으로 이름·시간·비용을 고칠 수 있고,
+// 매주 반복으로 만든 스케줄이면 수정·삭제 시 "이 날짜만 / 이후 반복 전체"를 선택하게 한다.
 function GigTimeCard({
   gig,
   seriesCount,
   onRemoveGig,
   onRemoveGigSeries,
+  onUpdateGig,
 }: {
   gig: Gig
   seriesCount: number
   onRemoveGig: (gigId: string) => void
   onRemoveGigSeries: (gigId: string) => void
+  onUpdateGig: (
+    gigId: string,
+    data: { endTime: string; fee: number; name: string; startTime: string },
+    applyToSeries: boolean,
+  ) => void
 }) {
   const [choosing, setChoosing] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [draftName, setDraftName] = useState(gig.name)
+  const [draftStart, setDraftStart] = useState(gig.startTime)
+  const [draftEnd, setDraftEnd] = useState(gig.endTime)
+  const [draftFee, setDraftFee] = useState(String(gig.fee))
+
+  function startEditing() {
+    setDraftName(gig.name)
+    setDraftStart(gig.startTime)
+    setDraftEnd(gig.endTime)
+    setDraftFee(String(gig.fee))
+    setChoosing(false)
+    setEditing(true)
+  }
+
+  function saveEditing(applyToSeries: boolean) {
+    onUpdateGig(
+      gig.id,
+      { endTime: draftEnd, fee: Number(draftFee) || 0, name: draftName, startTime: draftStart },
+      applyToSeries,
+    )
+    setEditing(false)
+  }
+
   return (
     <div className="timeClassCard gigCard">
       <div className="timeClassTop">
@@ -2976,21 +3172,98 @@ function GigTimeCard({
         </div>
         <small>{formatCurrency(gig.fee)}</small>
       </div>
-      {!choosing ? (
-        <button
-          type="button"
-          className="timeDeleteButton gigDelete"
-          onClick={() => {
-            if (seriesCount > 1) {
-              setChoosing(true)
-            } else if (window.confirm(`'${gig.name}' 스케줄을 삭제할까요?`)) {
-              onRemoveGig(gig.id)
-            }
-          }}
-        >
-          삭제
-        </button>
-      ) : (
+      {editing && (
+        <div className="draftRoster slotRoster">
+          <Field label="수업명">
+            <input
+              value={draftName}
+              onChange={(event) => setDraftName(event.target.value)}
+              placeholder="예: 문화센터 출강"
+            />
+          </Field>
+          <div className="split">
+            <Field label="시작 시간">
+              <input
+                type="time"
+                value={draftStart}
+                onChange={(event) => {
+                  const nextStart = event.target.value
+                  setDraftStart(nextStart)
+                  // 시작을 옮기면 종료도 같은 길이만큼 따라간다
+                  const duration =
+                    minutesFromTime(draftEnd) - minutesFromTime(draftStart) || 50
+                  setDraftEnd(timeFromMinutes(minutesFromTime(nextStart) + duration))
+                }}
+              />
+            </Field>
+            <Field label="종료 시간">
+              <input
+                type="time"
+                value={draftEnd}
+                onChange={(event) => setDraftEnd(event.target.value)}
+              />
+            </Field>
+          </div>
+          <Field label="회당 비용">
+            <input
+              type="number"
+              min="0"
+              value={draftFee}
+              onChange={(event) => setDraftFee(event.target.value)}
+            />
+          </Field>
+          {seriesCount > 1 ? (
+            <div className="gigDeleteChoice">
+              <p>매주 반복으로 등록된 스케줄이에요. 어디까지 적용할까요?</p>
+              <div className="choiceButtons">
+                <button
+                  type="button"
+                  className="secondaryButton"
+                  onClick={() => saveEditing(false)}
+                >
+                  이 날짜만 저장
+                </button>
+                <button type="button" className="draftConfirm" onClick={() => saveEditing(true)}>
+                  이후 반복 모두 저장 ({seriesCount}개)
+                </button>
+              </div>
+              <button type="button" className="draftCancel" onClick={() => setEditing(false)}>
+                취소
+              </button>
+            </div>
+          ) : (
+            <div className="draftFoot">
+              <button type="button" className="draftCancel" onClick={() => setEditing(false)}>
+                취소
+              </button>
+              <button type="button" className="draftConfirm" onClick={() => saveEditing(false)}>
+                저장
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+      {!editing && !choosing && (
+        <div className="cardActions gigActions">
+          <button type="button" className="timeSaveButton gigEdit" onClick={startEditing}>
+            수정
+          </button>
+          <button
+            type="button"
+            className="timeDeleteButton gigDelete"
+            onClick={() => {
+              if (seriesCount > 1) {
+                setChoosing(true)
+              } else if (window.confirm(`'${gig.name}' 스케줄을 삭제할까요?`)) {
+                onRemoveGig(gig.id)
+              }
+            }}
+          >
+            삭제
+          </button>
+        </div>
+      )}
+      {!editing && choosing && (
         <div className="gigDeleteChoice">
           <p>매주 반복으로 등록된 스케줄이에요. 지난 일정은 정산 기록으로 남습니다.</p>
           <div className="choiceButtons">
@@ -3097,19 +3370,25 @@ function TimeClassCard({
 
       {mode === 'idle' && (
         <div className="cardActions">
-          <button type="button" className="checkStartButton" onClick={startChecking}>
-            {checkedCount > 0 ? '출석 수정' : '출석 체크'}
-            {assignedMembers.length > 0 && ` (${checkedCount}/${assignedMembers.length})`}
-          </button>
-          {isPrivateClass(danceClass) && (
-            <button
-              type="button"
-              className={showEdit ? 'cardEditToggle on' : 'cardEditToggle'}
-              aria-label="수업 시간 변경·삭제"
-              onClick={() => setShowEdit((current) => !current)}
-            >
-              <Settings2 size={17} />
+          {/* 개인레슨은 여기서 출석 체크하지 않는다 — 횟수 차감은 출석 탭에서만 */}
+          {!isPrivateClass(danceClass) && (
+            <button type="button" className="checkStartButton" onClick={startChecking}>
+              {checkedCount > 0 ? '출석 수정' : '출석 체크'}
+              {assignedMembers.length > 0 && ` (${checkedCount}/${assignedMembers.length})`}
             </button>
+          )}
+          {isPrivateClass(danceClass) && (
+            <>
+              <span className="privateHint">출석은 출석 탭에서</span>
+              <button
+                type="button"
+                className={showEdit ? 'cardEditToggle on' : 'cardEditToggle'}
+                aria-label="수업 시간 변경·삭제"
+                onClick={() => setShowEdit((current) => !current)}
+              >
+                <Settings2 size={17} />
+              </button>
+            </>
           )}
         </div>
       )}
@@ -3136,7 +3415,7 @@ function TimeClassCard({
             onClick={() => {
               if (
                 window.confirm(
-                  `'${danceClass.name}' 수업을 시간표에서 삭제할까요?${isPrivateClass(danceClass) ? '' : ' (수강권은 유지됩니다)'}`,
+                  `'${danceClass.name}' 수업을 시간표에서 삭제할까요?${isPrivateClass(danceClass) ? ' (삭제해도 횟수는 차감되지 않아요)' : ' (수강권은 유지됩니다)'}`,
                 )
               ) {
                 onRemoveClass(danceClass.id)
@@ -3194,20 +3473,32 @@ function TimeClassCard({
 function QuickAddClass({
   members,
   onCreate,
+  passTemplates,
 }: {
   members: Member[]
-  onCreate: (startTime: string, memberIds: string[]) => void
+  onCreate: (startTime: string, endTime: string, memberIds: string[]) => void
+  passTemplates: PassTemplate[]
 }) {
   const [open, setOpen] = useState(false)
   const [picked, setPicked] = useState<Record<string, boolean>>({})
   const [searchTerm, setSearchTerm] = useState('')
   const [startTime, setStartTime] = useState('10:00')
+  const [endTime, setEndTime] = useState('10:50')
   const pickedCount = Object.values(picked).filter(Boolean).length
+  // 여기서 만드는 건 개인레슨뿐이므로, 개인레슨 수강권을 가진 회원만 보여준다
+  const privatePassNames = new Set(
+    passTemplates.filter((pass) => pass.type === 'private').map((pass) => pass.name),
+  )
+  const privateMembers = members
+    .filter((member) =>
+      member.enrollments.some((enrollment) => privatePassNames.has(enrollment.passName)),
+    )
+    .sort((a, b) => a.name.localeCompare(b.name, 'ko'))
   const searched = searchTerm
-    ? members.filter((member) =>
+    ? privateMembers.filter((member) =>
         `${member.name} ${member.phone}`.toLowerCase().includes(searchTerm.toLowerCase()),
       )
-    : members.filter((member) => picked[member.id])
+    : privateMembers
 
   if (!open) {
     return (
@@ -3228,30 +3519,48 @@ function QuickAddClass({
   return (
     <div className="timeClassCard">
       <div className="draftRoster slotRoster">
-        <div className="labelRow">
-          <span>시작 시간</span>
+        <div className="split">
+          <Field label="시작 시간">
+            <input
+              type="time"
+              value={startTime}
+              onChange={(event) => {
+                const nextStart = event.target.value
+                setStartTime(nextStart)
+                // 시작을 옮기면 종료도 같은 길이만큼 따라간다
+                const duration = minutesFromTime(endTime) - minutesFromTime(startTime) || 50
+                setEndTime(timeFromMinutes(minutesFromTime(nextStart) + duration))
+              }}
+            />
+          </Field>
+          <Field label="종료 시간">
+            <input
+              type="time"
+              value={endTime}
+              onChange={(event) => setEndTime(event.target.value)}
+            />
+          </Field>
         </div>
-        <input
-          type="time"
-          value={startTime}
-          onChange={(event) => setStartTime(event.target.value)}
-          aria-label="시작 시간"
-        />
-        <p className="draftGuide">수업에 넣을 회원을 검색해서 선택하세요</p>
+        <p className="draftGuide">
+          개인레슨 수강권이 있는 회원만 보여요 · 최대 3명(2:1·3:1 레슨)까지 선택
+        </p>
         <input
           type="search"
           className="pickSearch"
           placeholder="이름·전화번호 검색"
           value={searchTerm}
           onChange={(event) => setSearchTerm(event.target.value)}
-          autoFocus
         />
         {searched.map((member) => (
           <button
             type="button"
             className={picked[member.id] ? 'pickRow on' : 'pickRow'}
             onClick={() =>
-              setPicked((current) => ({ ...current, [member.id]: !current[member.id] }))
+              setPicked((current) => {
+                // 최대 3명까지만 (2:1·3:1 레슨)
+                if (!current[member.id] && pickedCount >= 3) return current
+                return { ...current, [member.id]: !current[member.id] }
+              })
             }
             key={member.id}
           >
@@ -3270,8 +3579,12 @@ function QuickAddClass({
             <b>{picked[member.id] ? '선택됨' : '선택'}</b>
           </button>
         ))}
-        {searchTerm && !searched.length && (
-          <em className="draftEmpty">검색 결과가 없습니다</em>
+        {!searched.length && (
+          <em className="draftEmpty">
+            {searchTerm
+              ? '검색 결과가 없습니다'
+              : '개인레슨 수강권을 가진 회원이 없어요. 회원 탭에서 개인레슨 수강권을 먼저 추가해 주세요.'}
+          </em>
         )}
         <div className="draftFoot">
           <button type="button" className="draftCancel" onClick={() => setOpen(false)}>
@@ -3284,6 +3597,7 @@ function QuickAddClass({
             onClick={() => {
               onCreate(
                 startTime,
+                endTime,
                 Object.entries(picked)
                   .filter(([, isPicked]) => isPicked)
                   .map(([memberId]) => memberId),
@@ -3291,7 +3605,7 @@ function QuickAddClass({
               setOpen(false)
             }}
           >
-            {pickedCount ? `${startTime}에 ${pickedCount}명 수업 만들기` : '회원을 선택하세요'}
+            {pickedCount ? `${startTime}에 ${pickedCount}명 레슨 만들기` : '회원을 선택하세요'}
           </button>
         </div>
       </div>
@@ -3306,6 +3620,7 @@ function QuickAddGig({
   baseDateKey: string
   onCreate: (
     startTime: string,
+    endTime: string,
     name: string,
     fee: number,
     repeatUntil?: string,
@@ -3315,6 +3630,7 @@ function QuickAddGig({
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
   const [startTime, setStartTime] = useState('14:00')
+  const [endTime, setEndTime] = useState('14:50')
   const [fee, setFee] = useState('60000')
   const [repeat, setRepeat] = useState<'none' | 'weekly' | 'weeklyNoHoliday'>('none')
   const [repeatUntil, setRepeatUntil] = useState(addMonthsFrom(baseDateKey, 2))
@@ -3343,18 +3659,31 @@ function QuickAddGig({
             <input
               type="time"
               value={startTime}
-              onChange={(event) => setStartTime(event.target.value)}
+              onChange={(event) => {
+                const nextStart = event.target.value
+                setStartTime(nextStart)
+                // 시작을 옮기면 종료도 같은 길이만큼 따라간다
+                const duration = minutesFromTime(endTime) - minutesFromTime(startTime) || 50
+                setEndTime(timeFromMinutes(minutesFromTime(nextStart) + duration))
+              }}
             />
           </Field>
-          <Field label="회당 비용">
+          <Field label="종료 시간">
             <input
-              type="number"
-              min="0"
-              value={fee}
-              onChange={(event) => setFee(event.target.value)}
+              type="time"
+              value={endTime}
+              onChange={(event) => setEndTime(event.target.value)}
             />
           </Field>
         </div>
+        <Field label="회당 비용">
+          <input
+            type="number"
+            min="0"
+            value={fee}
+            onChange={(event) => setFee(event.target.value)}
+          />
+        </Field>
         <div className="field">
           <span>반복</span>
           <div className="paymentFilters categoryChips" role="tablist" aria-label="반복">
@@ -3398,6 +3727,7 @@ function QuickAddGig({
             onClick={() => {
               onCreate(
                 startTime,
+                endTime,
                 name,
                 Number(fee) || 0,
                 repeatWeekly ? repeatUntil : undefined,
@@ -3868,7 +4198,10 @@ function MembersView({
                       )
                     ) : (
                       <div className="consultInfo">
-                        <span>{member.consultedAt ?? '상담일 없음'} · {member.interest || '관심 수업 미정'}</span>
+                        <span>
+                          {member.consultedAt ?? '상담일 없음'}
+                          {member.interest && ` · ${member.interest}`}
+                        </span>
                         {member.note && <p>{member.note}</p>}
                       </div>
                     )}
@@ -4133,67 +4466,105 @@ function AddEnrollmentRow({
   )
 }
 
-// 관심 수업 선택: 상위 카테고리(라인댄스/라틴댄스/개인레슨/기타)를 먼저 고르고,
-// 그 카테고리에 속한 수강권 중에서 선택한다. 어느 카테고리에서든 '기타'로 직접 입력 가능.
-function InterestPicker({ passTemplates }: { passTemplates: PassTemplate[] }) {
-  const [category, setCategory] = useState<LessonType | 'etc'>('line_group')
-  const [choice, setChoice] = useState('')
-  const categories: Array<{ label: string; value: LessonType | 'etc' }> = [
-    { label: '라인댄스', value: 'line_group' },
-    { label: '라틴댄스', value: 'latin_group' },
-    { label: '개인레슨', value: 'private' },
-    { label: '기타', value: 'etc' },
-  ]
-  const categoryLabel = categories.find((item) => item.value === category)?.label ?? ''
-  const visiblePasses =
-    category === 'etc' ? [] : passTemplates.filter((pass) => pass.type === category)
-  const showCustomInput = category === 'etc' || choice === '기타'
+// 상담일·구분 입력. '현재 대기'를 고르면 대기 현황에서 만든 대기 수업 목록이 나타난다.
+function ConsultStatusFields({
+  defaultConsultedAt,
+  defaultInterest,
+  defaultStatus,
+  waitlistClasses,
+}: {
+  defaultConsultedAt: string
+  defaultInterest: string
+  defaultStatus: MemberStatus
+  waitlistClasses: WaitlistClass[]
+}) {
+  const [status, setStatus] = useState<MemberStatus>(defaultStatus)
+  // 예전에 기록된 대기 수업이 목록에서 지워졌어도 기존 값은 계속 고를 수 있게 한다
+  const options = waitlistClasses.map((waitClass) => waitClass.name)
+  if (defaultInterest && !options.includes(defaultInterest)) options.unshift(defaultInterest)
   return (
     <>
-      <div className="field">
-        <span>관심 수업 종류</span>
-        <div className="paymentFilters categoryChips" role="tablist" aria-label="관심 수업 종류">
-          {categories.map((item) => (
-            <button
-              type="button"
-              className={category === item.value ? 'active' : ''}
-              onClick={() => {
-                setCategory(item.value)
-                setChoice(item.value === 'etc' ? '기타' : '')
-              }}
-              key={item.value}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      </div>
-      {/* 선택된 카테고리를 저장 시 함께 넘긴다 */}
-      <input type="hidden" name="interestCategory" value={categoryLabel} />
-      <input type="hidden" name="interestChoice" value={choice} />
-      {category !== 'etc' && (
-        <Field label="관심 수업">
+      <div className="split">
+        <Field label="상담일">
+          <input name="consultedAt" type="date" defaultValue={defaultConsultedAt} />
+        </Field>
+        <Field label="구분">
           <select
-            value={choice}
-            onChange={(event) => setChoice(event.target.value)}
-            aria-label="관심 수업"
+            name="status"
+            value={status}
+            onChange={(event) => setStatus(event.target.value as MemberStatus)}
           >
+            <option value="prospect">상담만 한 사람</option>
+            <option value="waitlist">현재 대기</option>
+          </select>
+        </Field>
+      </div>
+      {status === 'waitlist' && (
+        <Field label="대기 수업 (대기 현황에서 만든 수업)">
+          <select name="interest" defaultValue={defaultInterest}>
             <option value="">선택 안 함</option>
-            {visiblePasses.map((pass) => (
-              <option value={pass.name} key={pass.id}>
-                {pass.name}
+            {options.map((name) => (
+              <option value={name} key={name}>
+                {name}
               </option>
             ))}
-            <option value="기타">기타 (직접 입력)</option>
           </select>
         </Field>
       )}
-      {showCustomInput && (
-        <Field label="관심 수업 직접 입력">
-          <input name="interestCustom" placeholder="예: 오전 초급반" autoFocus />
-        </Field>
-      )}
     </>
+  )
+}
+
+// 대기 현황 전용 수업 만들기 (수업명 + 정원)
+function WaitClassAddForm({ onAdd }: { onAdd: (name: string, capacity: number) => void }) {
+  const [open, setOpen] = useState(false)
+  const [name, setName] = useState('')
+  const [capacity, setCapacity] = useState('10')
+  if (!open) {
+    return (
+      <button type="button" className="emptySlotButton" onClick={() => setOpen(true)}>
+        + 대기 수업 추가
+      </button>
+    )
+  }
+  return (
+    <div className="waitClassForm">
+      <div className="split">
+        <Field label="수업명">
+          <input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="예: 토요일 초급반"
+            autoFocus
+          />
+        </Field>
+        <Field label="정원">
+          <input
+            type="number"
+            min="0"
+            value={capacity}
+            onChange={(event) => setCapacity(event.target.value)}
+          />
+        </Field>
+      </div>
+      <div className="draftFoot">
+        <button type="button" className="draftCancel" onClick={() => setOpen(false)}>
+          취소
+        </button>
+        <button
+          type="button"
+          className="draftConfirm"
+          disabled={!name.trim()}
+          onClick={() => {
+            onAdd(name, Number(capacity) || 0)
+            setOpen(false)
+            setName('')
+          }}
+        >
+          추가
+        </button>
+      </div>
+    </div>
   )
 }
 
@@ -4239,18 +4610,24 @@ function SelectWithCustom({
 function ConsultationsView({
   consultationMembers,
   passTemplates,
+  waitlistClasses,
   waitlistMembers,
   onAddConsultation,
+  onAddWaitlistClass,
   onConvertMember,
   onRemoveMember,
+  onRemoveWaitlistClass,
   onUpdateConsultation,
 }: {
   consultationMembers: Member[]
   passTemplates: PassTemplate[]
+  waitlistClasses: WaitlistClass[]
   waitlistMembers: Member[]
   onAddConsultation: (formData: FormData) => void
+  onAddWaitlistClass: (name: string, capacity: number) => void
   onConvertMember: (memberId: string, passId?: string) => void
   onRemoveMember: (memberId: string) => void
+  onRemoveWaitlistClass: (waitClassId: string) => void
   onUpdateConsultation: (memberId: string, formData: FormData) => void
 }) {
   const [query, setQuery] = useState('')
@@ -4258,25 +4635,15 @@ function ConsultationsView({
   const [editingId, setEditingId] = useState<string | null>(null)
   const [convertingId, setConvertingId] = useState<string | null>(null)
   const [pickedPassId, setPickedPassId] = useState('')
-  // 대기자를 관심 수업(그룹 수강권)별로 묶는다 — 대기를 받는 수강권은 전부 보여주고,
-  // 많이 찬 순서로 정렬해 개강 임박한 수업이 위로 온다
-  const waitGroups = passTemplates
-    .filter((pass) => pass.type !== 'private')
-    .map((pass) => ({
-      capacity: pass.capacity,
-      key: pass.id,
-      label: pass.name,
-      waiting: waitlistMembers.filter((member) => member.interest === pass.name),
-    }))
-    .sort(
-      (a, b) =>
-        b.waiting.length - a.waiting.length || a.label.localeCompare(b.label, 'ko'),
-    )
+  // 대기 현황은 수강권과 완전히 별개 — 내가 직접 만든 대기 수업별로 대기자를 묶는다
+  const waitGroups = waitlistClasses.map((waitClass) => ({
+    capacity: waitClass.capacity,
+    key: waitClass.id,
+    label: waitClass.name,
+    waiting: waitlistMembers.filter((member) => member.interest === waitClass.name),
+  }))
   const etcWaiting = waitlistMembers.filter(
-    (member) =>
-      !passTemplates.some(
-        (pass) => pass.type !== 'private' && pass.name === member.interest,
-      ),
+    (member) => !waitlistClasses.some((waitClass) => waitClass.name === member.interest),
   )
   const followUpMembers = [...consultationMembers, ...waitlistMembers]
     .sort((a, b) => (b.consultedAt ?? '').localeCompare(a.consultedAt ?? ''))
@@ -4296,18 +4663,12 @@ function ConsultationsView({
         <Field label="전화번호">
           <input name="phone" type="tel" placeholder="010-0000-0000" required />
         </Field>
-        <div className="split">
-          <Field label="상담일">
-            <input name="consultedAt" type="date" defaultValue={todayKey} />
-          </Field>
-          <Field label="구분">
-            <select name="status" defaultValue="prospect">
-              <option value="prospect">상담만 한 사람</option>
-              <option value="waitlist">현재 대기</option>
-            </select>
-          </Field>
-        </div>
-        <InterestPicker passTemplates={passTemplates} />
+        <ConsultStatusFields
+          defaultConsultedAt={todayKey}
+          defaultInterest=""
+          defaultStatus="prospect"
+          waitlistClasses={waitlistClasses}
+        />
         <SelectWithCustom
           label="유입경로"
           name="source"
@@ -4319,75 +4680,94 @@ function ConsultationsView({
         </Field>
       </FormDrawer>
 
-      {(waitGroups.length > 0 || etcWaiting.length > 0) && (
-        <section className="panel">
-          <h2>대기 현황</h2>
-          <div className="listStack">
-            {waitGroups.map((group) => {
-              const full = group.capacity > 0 && group.waiting.length >= group.capacity
-              const percent =
-                group.capacity > 0
-                  ? Math.min(100, Math.round((group.waiting.length / group.capacity) * 100))
-                  : 0
-              return (
-                <div className={full ? 'waitGroup full' : 'waitGroup'} key={group.key}>
-                  <div className="waitGroupHead">
-                    <strong>{group.label}</strong>
-                    <b>
-                      {group.waiting.length}/{group.capacity}명{full && ' · 정원 참!'}
-                    </b>
-                  </div>
-                  {group.capacity > 0 && (
-                    <div className="waitBar">
-                      <i style={{ width: `${percent}%` }} />
-                    </div>
-                  )}
-                  {group.waiting.length > 0 && (
-                    <div className="waitNames">
-                      {group.waiting.map((member) => (
-                        <button
-                          type="button"
-                          className="waitNameChip"
-                          onClick={() => {
-                            if (
-                              window.confirm(
-                                `${member.name}님을 등록 회원으로 전환하고 '${group.label}' 수강권을 적용할까요?`,
-                              )
-                            ) {
-                              onConvertMember(member.id, group.key)
-                            }
-                          }}
-                          key={member.id}
-                        >
-                          {member.name} <b>등록</b>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-            {etcWaiting.length > 0 && (
-              <div className="waitGroup">
+      <section className="panel">
+        <h2>대기 현황</h2>
+        <div className="listStack">
+          {waitGroups.map((group) => {
+            const full = group.capacity > 0 && group.waiting.length >= group.capacity
+            const percent =
+              group.capacity > 0
+                ? Math.min(100, Math.round((group.waiting.length / group.capacity) * 100))
+                : 0
+            return (
+              <div className={full ? 'waitGroup full' : 'waitGroup'} key={group.key}>
                 <div className="waitGroupHead">
-                  <strong>기타 대기</strong>
-                  <b>{etcWaiting.length}명</b>
+                  <strong>{group.label}</strong>
+                  <b>
+                    {group.waiting.length}/{group.capacity}명{full && ' · 정원 참!'}
+                  </b>
+                  <button
+                    type="button"
+                    className="waitDeleteButton"
+                    aria-label={`${group.label} 대기 수업 삭제`}
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          `'${group.label}' 대기 수업을 삭제할까요?\n(대기 회원은 상담 내역에 그대로 남아요)`,
+                        )
+                      ) {
+                        onRemoveWaitlistClass(group.key)
+                      }
+                    }}
+                  >
+                    삭제
+                  </button>
                 </div>
-                <small>
-                  {etcWaiting
-                    .map((member) =>
-                      member.interest ? `${member.name} (${member.interest})` : member.name,
-                    )
-                    .join(' · ')}
-                </small>
+                {group.capacity > 0 && (
+                  <div className="waitBar">
+                    <i style={{ width: `${percent}%` }} />
+                  </div>
+                )}
+                {group.waiting.length > 0 && (
+                  <div className="waitNames">
+                    {group.waiting.map((member) => (
+                      <button
+                        type="button"
+                        className="waitNameChip"
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              `${member.name}님을 등록 회원으로 전환할까요?\n(수강권은 회원 탭에서 추가해 주세요)`,
+                            )
+                          ) {
+                            onConvertMember(member.id)
+                          }
+                        }}
+                        key={member.id}
+                      >
+                        {member.name} <b>등록</b>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-          <p className="hint ruleHint">
-            이름을 누르면 그 수강권으로 바로 등록돼요. 정원이 차면 홈에도 알림이 떠요.
-          </p>
-        </section>
-      )}
+            )
+          })}
+          {etcWaiting.length > 0 && (
+            <div className="waitGroup">
+              <div className="waitGroupHead">
+                <strong>기타 대기</strong>
+                <b>{etcWaiting.length}명</b>
+              </div>
+              <small>
+                {etcWaiting
+                  .map((member) =>
+                    member.interest ? `${member.name} (${member.interest})` : member.name,
+                  )
+                  .join(' · ')}
+              </small>
+            </div>
+          )}
+          {!waitGroups.length && !etcWaiting.length && (
+            <p className="emptyText">아직 대기 수업이 없어요. 아래에서 만들어 보세요.</p>
+          )}
+        </div>
+        <WaitClassAddForm onAdd={onAddWaitlistClass} />
+        <p className="hint ruleHint">
+          대기 수업은 수강권과 별개예요. 상담 등록에서 '현재 대기'를 고르면 이 목록에서
+          수업을 선택해요. 정원이 차면 홈에 알림이 떠요.
+        </p>
+      </section>
 
       <section className="panel">
         <h2>상담 내역</h2>
@@ -4396,7 +4776,7 @@ function ConsultationsView({
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="이름·전화·메모·관심수업·유입경로 검색"
+            placeholder="이름·전화·메모·대기수업·유입경로 검색"
           />
         </div>
         <div className="listStack">
@@ -4414,7 +4794,9 @@ function ConsultationsView({
               </a>
               <div className="consultBody">
                 <span>
-                  {member.consultedAt ?? '상담일 없음'} · {member.interest || '관심 수업 미정'}
+                  {member.consultedAt ?? '상담일 없음'}
+                  {member.interest &&
+                    ` · ${member.status === 'waitlist' ? '대기: ' : ''}${member.interest}`}
                   {member.source && ` · ${member.source}`}
                 </span>
                 <p>{member.note || '상담 메모 없음'}</p>
@@ -4437,24 +4819,12 @@ function ConsultationsView({
                       <input name="phone" type="tel" defaultValue={member.phone} required />
                     </Field>
                   </div>
-                  <div className="split">
-                    <Field label="상담일">
-                      <input
-                        name="consultedAt"
-                        type="date"
-                        defaultValue={member.consultedAt ?? todayKey}
-                      />
-                    </Field>
-                    <Field label="구분">
-                      <select name="status" defaultValue={member.status}>
-                        <option value="prospect">상담만 한 사람</option>
-                        <option value="waitlist">현재 대기</option>
-                      </select>
-                    </Field>
-                  </div>
-                  <Field label="관심 수업">
-                    <input name="interest" defaultValue={member.interest ?? ''} placeholder="예: 오전 초급반" />
-                  </Field>
+                  <ConsultStatusFields
+                    defaultConsultedAt={member.consultedAt ?? todayKey}
+                    defaultInterest={member.interest ?? ''}
+                    defaultStatus={member.status}
+                    waitlistClasses={waitlistClasses}
+                  />
                   <Field label="유입경로">
                     <input name="source" defaultValue={member.source ?? ''} placeholder="예: 문자, 전화, 지인 소개" />
                   </Field>

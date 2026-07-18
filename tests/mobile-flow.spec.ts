@@ -141,6 +141,80 @@ test('instructor can manage classes, members, attendance, and payment details', 
   await expect(timeCard.getByRole('button', { name: /출석 (체크|수정)/ })).toBeVisible()
 })
 
+test('gig end-time & edit, private lesson quick-add rules, custom waitlist classes', async ({
+  page,
+}) => {
+  // ── 내 스케줄(외부 강의): 종료 시간을 지정해서 추가
+  await page.getByRole('button', { name: '시간표', exact: true }).click()
+  await page.getByRole('button', { name: '+ 내 스케줄(외부 강의) 추가' }).click()
+  const gigForm = page.locator('.timeClassCard.gigCard')
+  await gigForm.getByPlaceholder('예: 문화센터 출강').fill('구민회관 특강')
+  await gigForm.locator('input[type="time"]').first().fill('15:00')
+  await gigForm.locator('input[type="time"]').nth(1).fill('16:20')
+  await gigForm.getByRole('button', { name: '스케줄 추가', exact: true }).click()
+  const gigCard = page.locator('.gigCard').filter({ hasText: '구민회관 특강' })
+  await expect(gigCard.getByText('15:00 - 16:20')).toBeVisible()
+
+  // ── 내 스케줄 수정: 이름·종료 시간 변경
+  await gigCard.getByRole('button', { name: '수정', exact: true }).click()
+  await gigCard.getByPlaceholder('예: 문화센터 출강').fill('구민회관 저녁 특강')
+  await gigCard.locator('input[type="time"]').nth(1).fill('16:40')
+  await gigCard.getByRole('button', { name: '저장', exact: true }).click()
+  await expect(
+    page.locator('.gigCard').filter({ hasText: '구민회관 저녁 특강' }).getByText('15:00 - 16:40'),
+  ).toBeVisible()
+
+  // ── 개인레슨 바로 추가: 개인레슨 수강권 보유자(이정아)만 목록에 뜬다
+  await page.getByRole('button', { name: '+ 이 날짜에 수업·개인레슨 바로 추가' }).click()
+  await expect(page.locator('.pickRow')).toHaveCount(1)
+  await page.locator('.pickRow').filter({ hasText: '이정아' }).click()
+  await page.getByRole('button', { name: /1명 레슨 만들기/ }).click()
+  const privateCard = page.locator('.timeClassCard').filter({ hasText: '이정아 개인레슨' })
+  await expect(privateCard).toBeVisible()
+  // 개인레슨 카드에는 출석 체크 버튼이 없다 (차감은 출석 탭에서만)
+  await expect(privateCard.getByRole('button', { name: /출석/ })).toHaveCount(0)
+
+  // 출석 탭에서 출석 체크 → 잔여 8회에서 7회로 차감
+  await page.getByRole('button', { name: '출석', exact: true }).click()
+  await page.locator('.panel select').selectOption({ label: '이정아 개인레슨' })
+  const lessonRow = page.locator('.attendanceRow').filter({ hasText: '이정아' })
+  await lessonRow.getByRole('button', { name: '출석', exact: true }).click()
+  await expect(lessonRow.getByText(/잔여 7\/10회/)).toBeVisible()
+
+  // ── 시간표에서 레슨을 삭제하면 출석 기록이 없던 일이 되고 잔여도 8회로 복구된다
+  await page.getByRole('button', { name: '시간표', exact: true }).click()
+  await privateCard.getByRole('button', { name: '수업 시간 변경·삭제' }).click()
+  await privateCard.getByRole('button', { name: '삭제', exact: true }).click()
+  await expect(privateCard).toHaveCount(0)
+  await page.getByRole('button', { name: '출석', exact: true }).click()
+  const leeStat = page.locator('.memberStatRow').filter({ hasText: '이정아' })
+  await leeStat.locator('summary.statSummary').click()
+  await expect(
+    leeStat.locator('.statPassLine').filter({ hasText: '개인레슨 10회권' }).locator('b'),
+  ).toHaveText('잔여 8/10회')
+
+  // ── 대기 현황: 수강권과 별개인 대기 수업을 직접 만든다
+  await page.getByRole('button', { name: '상담', exact: true }).click()
+  await page.getByRole('button', { name: '+ 대기 수업 추가' }).click()
+  await page.getByPlaceholder('예: 토요일 초급반').fill('토요 왕초보반')
+  await page.locator('.waitClassForm input[type="number"]').fill('2')
+  await page.locator('.waitClassForm').getByRole('button', { name: '추가', exact: true }).click()
+  const waitGroup = page.locator('.waitGroup').filter({ hasText: '토요 왕초보반' })
+  await expect(waitGroup.getByText('0/2명')).toBeVisible()
+
+  // ── 상담 등록: 관심 수업 항목은 없고, '현재 대기'를 고르면 대기 수업 목록이 뜬다
+  const consultDrawer = page.locator('details.formDrawer').filter({ hasText: '상담 등록' })
+  await consultDrawer.locator('summary').click()
+  await expect(consultDrawer.getByText('관심 수업 종류')).toHaveCount(0)
+  await consultDrawer.getByPlaceholder('상담 회원 이름').fill('한지원')
+  await consultDrawer.getByPlaceholder('010-0000-0000').fill('010-1234-9999')
+  await consultDrawer.locator('select[name="status"]').selectOption('waitlist')
+  await consultDrawer.locator('select[name="interest"]').selectOption('토요 왕초보반')
+  await consultDrawer.getByRole('button', { name: '추가', exact: true }).click()
+  await expect(waitGroup.getByText('1/2명')).toBeVisible()
+  await expect(waitGroup.locator('.waitNameChip').filter({ hasText: '한지원' })).toBeVisible()
+})
+
 test('deleting a pass removes its classes from the timetable and pickers', async ({ page }) => {
   // 삭제 전: 시간표와 출석 수업 선택에 초급 라인댄스가 있다
   await page.getByRole('button', { name: '시간표', exact: true }).click()
