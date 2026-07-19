@@ -2511,6 +2511,26 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
+/* 잘못 잡힌 수납 기록 1건 삭제 */
+.paymentLogDelete {
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: white;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.paymentLogDelete:active {
+  color: var(--danger);
+  border-color: rgba(224, 73, 47, 0.3);
+}
+
 .attendanceRow {
   display: flex;
   justify-content: space-between;

@@ -234,6 +234,21 @@ test('gig end-time & edit, private lesson quick-add rules, custom waitlist class
   await expect(dueRow).toBeVisible()
   await expect(page.getByRole('heading', { name: '월별 수입' })).toBeVisible()
 
+  // 수납 기록 개별 삭제: 잘못 잡힌 매출을 ✕로 지울 수 있다 (데모 시드 3건 → 2건)
+  await page.getByRole('button', { name: '전체', exact: true }).click()
+  const logRows = page.locator('.paymentLogRow')
+  await expect(logRows).toHaveCount(3)
+  await logRows.first().locator('.paymentLogDelete').click()
+  await expect(logRows).toHaveCount(2)
+
+  // 결제 정보 수정에서 결제일을 바꾸면 기록이 '이동'하고 중복 추가되지 않는다
+  const kimPay = page.locator('.paymentCard').filter({ hasText: '김미영' })
+  await kimPay.locator('details.enrollPayBlock summary').first().click()
+  await kimPay.getByRole('button', { name: '결제 정보 수정' }).click()
+  await kimPay.locator('input[name="lastPaidAt"]').fill(dateKey(-5))
+  await kimPay.getByRole('button', { name: '저장' }).click()
+  await expect(logRows).toHaveCount(2)
+
   // ── 대기 현황: 수강권과 별개인 대기 수업을 직접 만든다
   await page.getByRole('button', { name: '상담', exact: true }).click()
   await page.getByRole('button', { name: '+ 대기 수업 추가' }).click()

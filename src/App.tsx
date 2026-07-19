@@ -1375,12 +1375,30 @@ function App() {
             if (enrollment.id !== enrollmentId) return enrollment
             const paidAmount = Number(formData.get('paidAmount') ?? enrollment.paidAmount)
             const lastPaidAt = String(formData.get('lastPaidAt') ?? enrollment.lastPaidAt)
-            const payments =
-              paidAmount > 0 &&
-              lastPaidAt &&
-              !enrollment.payments.some((payment) => payment.date === lastPaidAt)
-                ? [...enrollment.payments, { amount: paidAmount, date: lastPaidAt }]
-                : enrollment.payments
+            // '결제 정보 수정'은 마지막 결제 기록을 고쳐 적는 것 — 날짜를 바꿀 때마다
+            // 새 기록을 추가하면 같은 결제가 두 번 잡혀 매출이 부풀어난다
+            let payments = enrollment.payments
+            if (paidAmount > 0 && lastPaidAt) {
+              const atNewDate = payments.findIndex((payment) => payment.date === lastPaidAt)
+              const previousRecord = payments.findIndex(
+                (payment) =>
+                  payment.date === enrollment.lastPaidAt &&
+                  payment.amount === enrollment.paidAmount,
+              )
+              if (atNewDate >= 0) {
+                // 같은 날짜 기록이 이미 있으면 금액만 고쳐 적는다
+                payments = payments.map((payment, index) =>
+                  index === atNewDate ? { ...payment, amount: paidAmount } : payment,
+                )
+              } else if (lastPaidAt !== enrollment.lastPaidAt && previousRecord >= 0) {
+                // 결제일을 고친 경우: 직전 결제 기록을 새 날짜로 옮긴다
+                payments = payments.map((payment, index) =>
+                  index === previousRecord ? { amount: paidAmount, date: lastPaidAt } : payment,
+                )
+              } else {
+                payments = [...payments, { amount: paidAmount, date: lastPaidAt }]
+              }
+            }
             return {
               ...enrollment,
               passName: String(formData.get('passName') || enrollment.passName),
@@ -1429,6 +1447,39 @@ function App() {
       ),
     )
     notify('수강권이 삭제되었습니다 (결제 기록은 수납 내역에 보존)')
+  }
+
+  // 잘못 기록된 수납 1건을 지운다 (수강권 등록·수정 실수로 매출이 부풀었을 때 정리용)
+  function removePaymentRecord(
+    ref:
+      | { kind: 'member'; memberId: string; enrollmentId: string }
+      | { kind: 'archive'; index: number },
+    record: PaymentRecord,
+  ) {
+    if (ref.kind === 'archive') {
+      setPaymentArchive((current) => current.filter((_, index) => index !== ref.index))
+    } else {
+      setMembers((current) =>
+        current.map((member) => {
+          if (member.id !== ref.memberId) return member
+          return {
+            ...member,
+            enrollments: member.enrollments.map((enrollment) => {
+              if (enrollment.id !== ref.enrollmentId) return enrollment
+              const removeIndex = enrollment.payments.findIndex(
+                (payment) => payment.date === record.date && payment.amount === record.amount,
+              )
+              if (removeIndex < 0) return enrollment
+              return {
+                ...enrollment,
+                payments: enrollment.payments.filter((_, index) => index !== removeIndex),
+              }
+            }),
+          }
+        }),
+      )
+    }
+    notify('수납 기록 1건을 삭제했습니다')
   }
 
   function quickRenew(memberId: string, enrollmentId: string) {
@@ -2367,6 +2418,7 @@ function App() {
           smsTemplates={smsTemplates}
           onNotify={notify}
           onQuickRenew={quickRenew}
+          onRemovePayment={removePaymentRecord}
           onUpdateEnrollment={updateEnrollment}
         />
       )}
@@ -5390,6 +5442,7 @@ function PaymentsView({
   smsTemplates,
   onNotify,
   onQuickRenew,
+  onRemovePayment,
   onUpdateEnrollment,
 }: {
   gigs: Gig[]
@@ -5398,6 +5451,12 @@ function PaymentsView({
   smsTemplates: SmsTemplates
   onNotify: (message: string) => void
   onQuickRenew: (memberId: string, enrollmentId: string) => void
+  onRemovePayment: (
+    ref:
+      | { kind: 'member'; memberId: string; enrollmentId: string }
+      | { kind: 'archive'; index: number },
+    record: PaymentRecord,
+  ) => void
   onUpdateEnrollment: (memberId: string, enrollmentId: string, formData: FormData) => void
 }) {
   const [statusFilter, setStatusFilter] = useState<PaymentStatus | 'all'>('all')
@@ -5410,7 +5469,8 @@ function PaymentsView({
     unpaid: members.filter((member) => memberWorstStatus(member) === 'unpaid').length,
   }
   const monthKey = todayKey.slice(0, 7)
-  // 현재 회원의 결제 + 삭제된 수강권/회원의 보존 기록을 합쳐 매출을 집계한다
+  // 현재 회원의 결제 + 삭제된 수강권/회원의 보존 기록을 합쳐 매출을 집계한다.
+  // ref는 수납 내역에서 잘못된 기록 1건을 지울 때 원본을 찾는 데 쓴다.
   const allPayments = [
     ...members.flatMap((member) =>
       member.enrollments.flatMap((enrollment) =>
@@ -5418,10 +5478,18 @@ function PaymentsView({
           ...payment,
           memberName: member.name,
           passName: enrollment.passName,
+          ref: {
+            kind: 'member' as const,
+            memberId: member.id,
+            enrollmentId: enrollment.id,
+          },
         })),
       ),
     ),
-    ...paymentArchive,
+    ...paymentArchive.map((payment, index) => ({
+      ...payment,
+      ref: { kind: 'archive' as const, index },
+    })),
   ].sort((a, b) => b.date.localeCompare(a.date))
   const monthTotal = allPayments
     .filter((payment) => payment.date.startsWith(monthKey))
@@ -5442,8 +5510,15 @@ function PaymentsView({
         allPayments.reduce((sum, payment) => sum + payment.amount, 0) / paidMonthKeys.length,
       )
     : 0
-  const monthGigs = gigs.filter((gig) => gig.date.startsWith(monthKey))
+  // 이번 달 외부 강의는 '오늘까지 한 것'만 수입으로 잡고, 남은 스케줄은 예정으로 따로 보여준다
+  const monthGigs = gigs.filter(
+    (gig) => gig.date.startsWith(monthKey) && gig.date <= todayKey,
+  )
   const monthGigTotal = monthGigs.reduce((sum, gig) => sum + gig.fee, 0)
+  const upcomingGigs = gigs.filter(
+    (gig) => gig.date.startsWith(monthKey) && gig.date > todayKey,
+  )
+  const upcomingGigTotal = upcomingGigs.reduce((sum, gig) => sum + gig.fee, 0)
   const lastMonthGigTotal = gigs
     .filter((gig) => gig.date.startsWith(lastMonthKey))
     .reduce((sum, gig) => sum + gig.fee, 0)
@@ -5565,6 +5640,11 @@ function PaymentsView({
           외부 강의 {formatCurrency(monthGigTotal)}
           {monthGigs.length > 0 && ` · ${monthGigs.length}회`}
         </span>
+        {upcomingGigTotal > 0 && (
+          <span>
+            이달 남은 강의 예정 +{formatCurrency(upcomingGigTotal)} · {upcomingGigs.length}회
+          </span>
+        )}
         <span>지난달 총 {formatCurrency(lastMonthTotal + lastMonthGigTotal)}</span>
         <span>올해 누적 {formatCurrency(yearTotal)}</span>
         <span>월 평균 회비 {formatCurrency(monthlyAverage)}</span>
@@ -5897,11 +5977,14 @@ function PaymentsView({
             이 기간 합계 <b>{formatCurrency(visibleTotal)}</b> · {visiblePayments.length}건
           </p>
         )}
+        <p className="hint storageHint">
+          수강권 등록·재결제 때 자동 기록돼요. 잘못 잡힌 기록은 ✕로 지울 수 있어요.
+        </p>
         <div className="listStack">
-          {visiblePayments.slice(0, logVisible).map((payment) => (
+          {visiblePayments.slice(0, logVisible).map((payment, index) => (
             <div
               className="paymentLogRow"
-              key={`${payment.date}-${payment.memberName}-${payment.passName}-${payment.amount}`}
+              key={`${payment.date}-${payment.memberName}-${payment.amount}-${index}`}
             >
               <span className="paymentLogDate">{payment.date.slice(2).replaceAll('-', '/')}</span>
               <strong>
@@ -5909,6 +5992,22 @@ function PaymentsView({
                 <small> · {payment.passName}</small>
               </strong>
               <b>{formatCurrency(payment.amount)}</b>
+              <button
+                type="button"
+                className="paymentLogDelete"
+                aria-label={`${payment.memberName} ${payment.date} 수납 기록 삭제`}
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      `${payment.date} ${payment.memberName} ${formatCurrency(payment.amount)} 수납 기록을 삭제할까요?\n(매출 합계에서 빠져요)`,
+                    )
+                  ) {
+                    onRemovePayment(payment.ref, { amount: payment.amount, date: payment.date })
+                  }
+                }}
+              >
+                ✕
+              </button>
             </div>
           ))}
           {!visiblePayments.length && (
