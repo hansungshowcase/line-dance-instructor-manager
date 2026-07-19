@@ -2364,6 +2364,8 @@ function App() {
           gigs={gigs}
           members={activeMembers}
           paymentArchive={paymentArchive}
+          smsTemplates={smsTemplates}
+          onNotify={notify}
           onQuickRenew={quickRenew}
           onUpdateEnrollment={updateEnrollment}
         />
@@ -5385,12 +5387,16 @@ function PaymentsView({
   gigs,
   members,
   paymentArchive,
+  smsTemplates,
+  onNotify,
   onQuickRenew,
   onUpdateEnrollment,
 }: {
   gigs: Gig[]
   members: Member[]
   paymentArchive: ArchivedPayment[]
+  smsTemplates: SmsTemplates
+  onNotify: (message: string) => void
   onQuickRenew: (memberId: string, enrollmentId: string) => void
   onUpdateEnrollment: (memberId: string, enrollmentId: string, formData: FormData) => void
 }) {
@@ -5457,6 +5463,59 @@ function PaymentsView({
         (a.dueDays ?? 999) - (b.dueDays ?? 999) ||
         a.member.name.localeCompare(b.member.name, 'ko'),
     )
+  // 곧 결제 예정(임박) 목록 — 며칠 안 남은 순서. 받을 돈 예측용
+  const soonList = members
+    .flatMap((member) =>
+      member.enrollments
+        .filter((enrollment) => enrollmentStatus(enrollment) === 'soon')
+        .map((enrollment) => ({
+          dueDays: daysUntil(enrollment.nextPaymentDue),
+          enrollment,
+          member,
+        })),
+    )
+    .sort(
+      (a, b) =>
+        (a.dueDays ?? 99) - (b.dueDays ?? 99) ||
+        a.member.name.localeCompare(b.member.name, 'ko'),
+    )
+  const soonTotal = soonList.reduce((sum, item) => sum + item.enrollment.paidAmount, 0)
+  // 올해 누적 수입 (회비 + 외부 강의)
+  const yearKey = todayKey.slice(0, 4)
+  const yearTotal =
+    allPayments
+      .filter((payment) => payment.date.startsWith(yearKey))
+      .reduce((sum, payment) => sum + payment.amount, 0) +
+    gigs
+      .filter((gig) => gig.date.startsWith(yearKey))
+      .reduce((sum, gig) => sum + gig.fee, 0)
+
+  // 정산·세금 신고용: 회비 + 외부 강의 수입 전체를 엑셀(CSV)로 내보낸다
+  function exportIncomeCsv() {
+    const rows: Array<Array<string | number>> = [
+      ...allPayments.map((payment) => [
+        payment.date,
+        '회비',
+        payment.memberName,
+        payment.passName,
+        payment.amount,
+      ]),
+      ...gigs.map((gig) => [gig.date, '외부 강의', gig.name, '', gig.fee]),
+    ].sort((a, b) => String(b[0]).localeCompare(String(a[0])))
+    const csv =
+      '﻿' +
+      [['날짜', '구분', '이름/수업', '수강권', '금액'], ...rows]
+        .map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(','))
+        .join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `라인댄스-수입내역-${todayKey}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+    onNotify('수입 내역을 엑셀 파일로 내보냈습니다')
+  }
   // 월별 수입 (회비 + 외부 강의) — 최근 6개월
   const incomeByMonth = new Map<string, { fees: number; gigs: number }>()
   for (const payment of allPayments) {
@@ -5507,6 +5566,7 @@ function PaymentsView({
           {monthGigs.length > 0 && ` · ${monthGigs.length}회`}
         </span>
         <span>지난달 총 {formatCurrency(lastMonthTotal + lastMonthGigTotal)}</span>
+        <span>올해 누적 {formatCurrency(yearTotal)}</span>
         <span>월 평균 회비 {formatCurrency(monthlyAverage)}</span>
         <span>완납 {counts.paid} · 임박 {counts.soon} · 미납 {counts.unpaid}</span>
         {unpaidTotal > 0 && (
@@ -5516,40 +5576,100 @@ function PaymentsView({
         )}
       </section>
 
-      {/* 받아야 할 돈부터 한눈에 — 누르면 그 회원의 결제 카드로 이동 */}
-      {unpaidList.length > 0 && (
+      {/* 받아야 할 돈부터 한눈에 — 밀린 회비(빨강) + 곧 결제 예정(주황).
+          이름을 누르면 그 회원의 결제 카드로, 문자·전화로 바로 독촉·안내 */}
+      {(unpaidList.length > 0 || soonList.length > 0) && (
         <section className="panel">
           <h2>받아야 할 회비</h2>
           <div className="listStack">
             {unpaidList.map(({ dueDays, enrollment, member }) => (
-              <button
-                type="button"
-                className="dueRow"
-                onClick={() => {
-                  setStatusFilter('all')
-                  setTimeout(() => {
-                    document
-                      .getElementById(`payment-card-${member.id}`)
-                      ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                  }, 120)
-                }}
-                key={enrollment.id}
-              >
-                <strong>{member.name}</strong>
-                <small>
-                  {enrollment.passName}
-                  {enrollment.totalCredits > 0 && enrollment.remainingCredits <= 0
-                    ? ' · 횟수 소진'
-                    : dueDays !== null && dueDays < 0
-                      ? ` · ${-dueDays}일 지남`
-                      : ''}
-                </small>
-                <b>{formatCurrency(enrollment.paidAmount)}</b>
-              </button>
+              <div className="dueRow" key={enrollment.id}>
+                <button
+                  type="button"
+                  className="dueInfo"
+                  onClick={() => {
+                    setStatusFilter('all')
+                    setTimeout(() => {
+                      document
+                        .getElementById(`payment-card-${member.id}`)
+                        ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                    }, 120)
+                  }}
+                >
+                  <strong>{member.name}</strong>
+                  <small>
+                    {enrollment.passName}
+                    {enrollment.totalCredits > 0 && enrollment.remainingCredits <= 0
+                      ? ' · 횟수 소진'
+                      : dueDays !== null && dueDays < 0
+                        ? ` · ${-dueDays}일 지남`
+                        : ''}
+                  </small>
+                  <b>{formatCurrency(enrollment.paidAmount)}</b>
+                </button>
+                <a
+                  className="smsButton"
+                  href={smsHref(member.phone, smsTemplates.unpaid)}
+                  aria-label={`${member.name} 문자`}
+                >
+                  <MessageCircle size={17} />
+                </a>
+                <a
+                  className="callButton"
+                  href={`tel:${member.phone}`}
+                  aria-label={`${member.name} 전화`}
+                >
+                  <PhoneCall size={17} />
+                </a>
+              </div>
+            ))}
+            {soonList.map(({ dueDays, enrollment, member }) => (
+              <div className="dueRow soonRow" key={enrollment.id}>
+                <button
+                  type="button"
+                  className="dueInfo"
+                  onClick={() => {
+                    setStatusFilter('all')
+                    setTimeout(() => {
+                      document
+                        .getElementById(`payment-card-${member.id}`)
+                        ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                    }, 120)
+                  }}
+                >
+                  <strong>{member.name}</strong>
+                  <small>
+                    {enrollment.passName}
+                    {enrollment.totalCredits > 0 && enrollment.remainingCredits <= 2
+                      ? ` · 잔여 ${enrollment.remainingCredits}회`
+                      : dueDays !== null
+                        ? ` · D-${dueDays}`
+                        : ''}
+                  </small>
+                  <b>{formatCurrency(enrollment.paidAmount)}</b>
+                </button>
+                <a
+                  className="smsButton"
+                  href={smsHref(member.phone, smsTemplates.expiring)}
+                  aria-label={`${member.name} 문자`}
+                >
+                  <MessageCircle size={17} />
+                </a>
+                <a
+                  className="callButton"
+                  href={`tel:${member.phone}`}
+                  aria-label={`${member.name} 전화`}
+                >
+                  <PhoneCall size={17} />
+                </a>
+              </div>
             ))}
           </div>
           <p className="hint ruleHint">
-            합계 {formatCurrency(unpaidTotal)} · 누르면 아래 그 회원의 결제 카드로 이동해요.
+            {unpaidTotal > 0 && `밀린 회비 ${formatCurrency(unpaidTotal)}`}
+            {unpaidTotal > 0 && soonTotal > 0 && ' · '}
+            {soonTotal > 0 && `곧 결제 예정 ${formatCurrency(soonTotal)}`} — 이름을 누르면 그
+            회원의 결제 카드로 이동해요.
           </p>
         </section>
       )}
@@ -5829,6 +5949,9 @@ function PaymentsView({
             })}
           </div>
           <p className="hint ruleHint">최근 6개월. 외부 강의는 시간표의 내 스케줄 기준이에요.</p>
+          <button type="button" className="historyMoreButton" onClick={exportIncomeCsv}>
+            수입 내역 엑셀(CSV) 내보내기 — 정산·세금 신고용
+          </button>
         </section>
       )}
     </section>

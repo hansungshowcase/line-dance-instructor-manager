@@ -2633,8 +2633,16 @@ button {
   font-weight: 700;
 }
 
-/* 받아야 할 회비: 회원별 미수금 한 줄 — 누르면 그 회원의 결제 카드로 이동 */
+/* 받아야 할 회비: 회원별 미수금 한 줄 — 카드 이동 + 문자·전화 버튼 */
 .dueRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dueInfo {
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -2646,13 +2654,13 @@ button {
   text-align: left;
 }
 
-.dueRow strong {
+.dueInfo strong {
   flex: 0 0 auto;
   font-size: 14px;
   font-weight: 700;
 }
 
-.dueRow small {
+.dueInfo small {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -2663,12 +2671,22 @@ button {
   font-weight: 600;
 }
 
-.dueRow b {
+.dueInfo b {
   flex: 0 0 auto;
   color: var(--danger);
   font-size: 14px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
+}
+
+/* 곧 결제 예정(임박) 줄은 주황 톤 */
+.dueRow.soonRow .dueInfo {
+  border-color: rgba(192, 127, 20, 0.3);
+  background: var(--warn-soft);
+}
+
+.dueRow.soonRow .dueInfo b {
+  color: var(--warn);
 }
 
 /* 월별 수입 (회비 + 외부 강의) */
