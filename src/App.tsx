@@ -1,6 +1,7 @@
 import {
   CalendarDays,
   CheckCircle2,
+  ChevronLeft,
   ChevronRight,
   CircleDollarSign,
   ClipboardList,
@@ -19,6 +20,23 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react'
 import './App.css'
 import { firebaseReady } from './firebase'
+import { datesForWeekdays, shiftMonth } from './features/attendance/date-options'
+import {
+  buildPaymentLedger,
+  calculateIncomeSummary,
+  type PaymentSourceRef,
+} from './features/payments/ledger'
+import {
+  reconcilePrivateLessonCharges,
+  refundPrivateLessonCharges,
+  type PrivateLessonChargeBook,
+} from './features/private-lessons/reconcile'
+import { SmsComposer } from './features/sms/SmsComposer'
+import { SmsTemplateSettings } from './features/sms/SmsTemplateSettings'
+import {
+  loadSmsTemplates,
+  type SmsTemplate,
+} from './features/sms/templates'
 import { generateSyncCode, isValidSyncCode, pushSync, subscribeSync } from './sync'
 
 type Tab = 'home' | 'schedule' | 'members' | 'consultations' | 'attendance' | 'payments'
@@ -78,7 +96,11 @@ type PaymentRecord = {
 }
 
 // 수강권·회원을 삭제해도 매출(정산) 기록은 지워지지 않도록 옮겨 담는 보존 장부
-type ArchivedPayment = PaymentRecord & { memberName: string; passName: string }
+type ArchivedPayment = PaymentRecord & {
+  memberName: string
+  passName: string
+  classNames?: string[]
+}
 
 // 회원이 보유한 수강권 1개 — 결제일·잔여횟수·결제내역이 수강권마다 독립적이다
 type Enrollment = {
@@ -157,22 +179,6 @@ function loadSyncMeta(): SyncMeta {
   }
 }
 
-const defaultSmsTemplates = {
-  unpaid: '회원님 안녕하세요~ 수강료 결제일이 지나서 안내드려요. 확인 부탁드립니다 :)',
-  lowCredit: '회원님 안녕하세요~ 수강권 횟수가 얼마 남지 않아 재등록 안내드려요. 계속 함께해요 :)',
-  expiring: '회원님 안녕하세요~ 다음 결제일이 다가와서 미리 안내드려요 :)',
-}
-
-function sanitizeTemplate(text: string) {
-  return text
-    .replaceAll('{이름}님', '회원님')
-    .replaceAll('{이름}', '회원')
-    .replaceAll('{잔여}회', '얼마')
-    .replaceAll('({결제일})', '')
-    .replaceAll('{결제일}', '')
-}
-
-type SmsTemplates = typeof defaultSmsTemplates
 const startHour = 10
 // 주소 뒤에 ?demo 를 붙였을 때만 연습용 샘플 데이터가 보인다
 const isDemoMode =
@@ -194,11 +200,6 @@ function addDays(days: number) {
 function addMonthsFrom(dateKey: string, months: number) {
   const [year, month, day] = (dateKey || todayKey).split('-').map(Number)
   return toDateKey(new Date(year, month - 1 + months, day))
-}
-
-function addDaysFrom(dateKey: string, days: number) {
-  const [year, month, day] = (dateKey || todayKey).split('-').map(Number)
-  return toDateKey(new Date(year, month - 1, day + days))
 }
 
 function makeId(prefix: string) {
@@ -704,6 +705,8 @@ function useStoredData() {
   const [attendance, setAttendance] = useState<AttendanceBook>({})
   const [gigs, setGigs] = useState<Gig[]>([])
   const [paymentArchive, setPaymentArchive] = useState<ArchivedPayment[]>([])
+  const [privateLessonCharges, setPrivateLessonCharges] =
+    useState<PrivateLessonChargeBook>({})
   const [waitlistClasses, setWaitlistClasses] = useState<WaitlistClass[]>([])
   // 저장된 데이터를 불러오는 첫 로드가 끝났는지 (동기화가 '로드'와 '편집'을 구분하는 데 쓴다)
   const [hydrated, setHydrated] = useState(isDemoMode)
@@ -720,6 +723,7 @@ function useStoredData() {
           attendance?: AttendanceBook
           gigs?: Gig[]
           paymentArchive?: ArchivedPayment[]
+          privateLessonCharges?: PrivateLessonChargeBook
           waitlistClasses?: WaitlistClass[]
         }
         const loadedMembers = dedupeClassOwnership(
@@ -733,6 +737,7 @@ function useStoredData() {
         if (saved.attendance) setAttendance(saved.attendance)
         if (saved.gigs?.length) setGigs(saved.gigs)
         if (saved.paymentArchive?.length) setPaymentArchive(saved.paymentArchive)
+        if (saved.privateLessonCharges) setPrivateLessonCharges(saved.privateLessonCharges)
         if (saved.waitlistClasses?.length) setWaitlistClasses(saved.waitlistClasses)
       } catch {
         localStorage.removeItem(storageKey)
@@ -752,10 +757,20 @@ function useStoredData() {
         attendance,
         gigs,
         paymentArchive,
+        privateLessonCharges,
         waitlistClasses,
       }),
     )
-  }, [members, classes, passTemplates, attendance, gigs, paymentArchive, waitlistClasses])
+  }, [
+    members,
+    classes,
+    passTemplates,
+    attendance,
+    gigs,
+    paymentArchive,
+    privateLessonCharges,
+    waitlistClasses,
+  ])
 
   return {
     attendance,
@@ -765,12 +780,14 @@ function useStoredData() {
     members,
     passTemplates,
     paymentArchive,
+    privateLessonCharges,
     setAttendance,
     setClasses,
     setGigs,
     setMembers,
     setPassTemplates,
     setPaymentArchive,
+    setPrivateLessonCharges,
     setWaitlistClasses,
     waitlistClasses,
   }
@@ -785,12 +802,14 @@ function App() {
     members,
     passTemplates,
     paymentArchive,
+    privateLessonCharges,
     setAttendance,
     setClasses,
     setGigs,
     setMembers,
     setPassTemplates,
     setPaymentArchive,
+    setPrivateLessonCharges,
     setWaitlistClasses,
     waitlistClasses,
   } = useStoredData()
@@ -849,21 +868,50 @@ function App() {
   const [convertedMemberId, setConvertedMemberId] = useState<string | null>(null)
   const [lastBackupAt, setLastBackupAt] = useState(() => localStorage.getItem(backupKey) ?? '')
   const [toast, setToast] = useState<string | null>(null)
-  const [smsTemplates, setSmsTemplates] = useState<SmsTemplates>(() => {
-    try {
-      const saved = {
-        ...defaultSmsTemplates,
-        ...(JSON.parse(localStorage.getItem(smsTemplateKey) ?? '{}') as Partial<SmsTemplates>),
-      }
-      return {
-        unpaid: sanitizeTemplate(saved.unpaid),
-        lowCredit: sanitizeTemplate(saved.lowCredit),
-        expiring: sanitizeTemplate(saved.expiring),
-      }
-    } catch {
-      return defaultSmsTemplates
+  const [smsTemplates, setSmsTemplates] = useState<readonly SmsTemplate[]>(() =>
+    loadSmsTemplates(localStorage.getItem(smsTemplateKey)),
+  )
+  const [smsComposerMemberId, setSmsComposerMemberId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!hydrated) return
+    const result = reconcilePrivateLessonCharges({
+      attendance,
+      charges: privateLessonCharges,
+      classes,
+      members,
+      todayKey,
+    })
+    if (!result.changed) return
+    if (result.deductions.length) {
+      setMembers((current) =>
+        current.map((member) => ({
+          ...member,
+          enrollments: member.enrollments.map((enrollment) => {
+            const deductionCount = result.deductions.filter(
+              (change) =>
+                change.memberId === member.id && change.enrollmentId === enrollment.id,
+            ).length
+            return deductionCount
+              ? {
+                  ...enrollment,
+                  remainingCredits: enrollment.remainingCredits - deductionCount,
+                }
+              : enrollment
+          }),
+        })),
+      )
     }
-  })
+    setPrivateLessonCharges(result.charges)
+  }, [
+    attendance,
+    classes,
+    hydrated,
+    members,
+    privateLessonCharges,
+    setMembers,
+    setPrivateLessonCharges,
+  ])
 
   useEffect(() => {
     if (!toast) return
@@ -875,15 +923,9 @@ function App() {
     setToast(message)
   }
 
-  function saveSmsTemplates(formData: FormData) {
-    const next: SmsTemplates = {
-      unpaid: String(formData.get('unpaid') || defaultSmsTemplates.unpaid),
-      lowCredit: String(formData.get('lowCredit') || defaultSmsTemplates.lowCredit),
-      expiring: String(formData.get('expiring') || defaultSmsTemplates.expiring),
-    }
+  function saveSmsTemplates(next: readonly SmsTemplate[]) {
     setSmsTemplates(next)
     localStorage.setItem(smsTemplateKey, JSON.stringify(next))
-    notify('문자 템플릿이 저장되었습니다')
   }
 
   function copyText(text: string) {
@@ -904,6 +946,7 @@ function App() {
     members,
     passTemplates,
     paymentArchive,
+    privateLessonCharges,
     waitlistClasses,
   })
   const [syncCode, setSyncCode] = useState(() =>
@@ -985,6 +1028,7 @@ function App() {
           attendance?: AttendanceBook
           gigs?: Gig[]
           paymentArchive?: ArchivedPayment[]
+          privateLessonCharges?: PrivateLessonChargeBook
           waitlistClasses?: WaitlistClass[]
         }
         // syncJson과 같은 키 순서·같은 객체로 직렬화해 다음 렌더의 syncJson과 정확히
@@ -1003,6 +1047,7 @@ function App() {
           members: remoteMembers,
           passTemplates: parsed.passTemplates ?? [],
           paymentArchive: parsed.paymentArchive ?? [],
+          privateLessonCharges: parsed.privateLessonCharges ?? {},
           waitlistClasses: parsed.waitlistClasses ?? [],
         }
         setMembers(next.members)
@@ -1011,6 +1056,7 @@ function App() {
         setAttendance(next.attendance)
         setGigs(next.gigs)
         setPaymentArchive(next.paymentArchive)
+        setPrivateLessonCharges(next.privateLessonCharges)
         setWaitlistClasses(next.waitlistClasses)
         clearPushTimer()
         // 기준선은 '서버에 실제로 있던 값'으로 잡는다. 청소·정리로 로컬이 달라졌다면
@@ -1101,6 +1147,7 @@ function App() {
     setMembers,
     setPassTemplates,
     setPaymentArchive,
+    setPrivateLessonCharges,
     setWaitlistClasses,
   ])
 
@@ -1425,10 +1472,19 @@ function App() {
     const owner = members.find((member) => member.id === memberId)
     const target = owner?.enrollments.find((enrollment) => enrollment.id === enrollmentId)
     if (owner && target && target.payments.length) {
+      const classNames = target.classIds.flatMap((classId) => {
+        const danceClass = classes.find((item) => item.id === classId)
+        return danceClass ? [danceClass.name] : []
+      })
       setPaymentArchive((current) => [
         ...current,
         ...target.payments.map((payment) => ({
           ...payment,
+          classNames: classNames.length
+            ? [...new Set(classNames)]
+            : target.passName.includes('개인')
+              ? ['개인레슨']
+              : ['수업 정보 없음'],
           memberName: owner.name,
           passName: target.passName,
         })),
@@ -1446,14 +1502,12 @@ function App() {
           : member,
       ),
     )
-    notify('수강권이 삭제되었습니다 (결제 기록은 수납 내역에 보존)')
+    notify('수강을 종료했습니다 (입금·출석 이력은 보존됩니다)')
   }
 
   // 잘못 기록된 수납 1건을 지운다 (수강권 등록·수정 실수로 매출이 부풀었을 때 정리용)
   function removePaymentRecord(
-    ref:
-      | { kind: 'member'; memberId: string; enrollmentId: string }
-      | { kind: 'archive'; index: number },
+    ref: PaymentSourceRef,
     record: PaymentRecord,
   ) {
     if (ref.kind === 'archive') {
@@ -2091,61 +2145,42 @@ function App() {
 
   function removeClass(classId: string) {
     const target = classes.find((danceClass) => danceClass.id === classId)
-    // 개인레슨 삭제 = 수업이 없던 일이 되는 것. 삭제 때문에 횟수가 깎여 있으면 안 되므로
-    // 이 수업의 출석 기록을 지우고, 출석으로 차감됐던 횟수는 되돌린다 (차감은 출석에서만)
-    const refunds = new Map<string, number>()
+    const refundResult = refundPrivateLessonCharges({
+      charges: privateLessonCharges,
+      classId,
+    })
+    if (refundResult.charges !== privateLessonCharges) {
+      setPrivateLessonCharges(refundResult.charges)
+    }
     if (target && isPrivateClass(target)) {
-      let hasRecords = false
-      for (const [key, status] of Object.entries(attendance)) {
-        const [, keyClassId, memberId] = key.split('|')
-        if (keyClassId !== classId) continue
-        hasRecords = true
-        if (status === 'present' || status === 'makeup') {
-          refunds.set(memberId, (refunds.get(memberId) ?? 0) + 1)
-        }
-      }
-      if (hasRecords) {
-        setAttendance((current) =>
-          Object.fromEntries(
-            Object.entries(current).filter(([key]) => key.split('|')[1] !== classId),
-          ),
-        )
-      }
+      setAttendance((current) =>
+        Object.fromEntries(
+          Object.entries(current).filter(([key]) => key.split('|')[1] !== classId),
+        ),
+      )
     }
     notify('수업이 삭제되었습니다')
     setClasses((current) => current.filter((danceClass) => danceClass.id !== classId))
     setMembers((current) =>
-      current.map((member) => {
-        const refund = refunds.get(member.id) ?? 0
-        let enrollments = member.enrollments
-        if (refund > 0) {
-          // 차감됐던 곳(그 수업이 속한 회수권)에 그대로 되돌린다 — markAttendance와 같은 규칙
-          const countEnrollments = enrollments.filter((e) => e.totalCredits > 0)
-          const refundTarget =
-            countEnrollments.find((e) => e.classIds.includes(classId)) ??
-            (countEnrollments.length === 1 ? countEnrollments[0] : undefined)
-          if (refundTarget) {
-            enrollments = enrollments.map((enrollment) =>
-              enrollment.id === refundTarget.id
-                ? {
-                    ...enrollment,
-                    remainingCredits: Math.min(
-                      enrollment.totalCredits,
-                      enrollment.remainingCredits + refund,
-                    ),
-                  }
-                : enrollment,
-            )
-          }
-        }
-        return {
-          ...member,
-          enrollments: enrollments.map((enrollment) => ({
+      current.map((member) => ({
+        ...member,
+        enrollments: member.enrollments.map((enrollment) => {
+          const refundCount = refundResult.refunds.filter(
+            (change) =>
+              change.memberId === member.id && change.enrollmentId === enrollment.id,
+          ).length
+          return {
             ...enrollment,
             classIds: enrollment.classIds.filter((id) => id !== classId),
-          })),
-        }
-      }),
+            remainingCredits: refundCount
+              ? Math.min(
+                  enrollment.totalCredits,
+                  enrollment.remainingCredits + refundCount,
+                )
+              : enrollment.remainingCredits,
+          }
+        }),
+      })),
     )
     setPassTemplates((current) =>
       current.map((pass) =>
@@ -2161,11 +2196,22 @@ function App() {
     const target = members.find((member) => member.id === memberId)
     const payments = target
       ? target.enrollments.flatMap((enrollment) =>
-          enrollment.payments.map((payment) => ({
-            ...payment,
-            memberName: target.name,
-            passName: enrollment.passName,
-          })),
+          enrollment.payments.map((payment) => {
+            const classNames = enrollment.classIds.flatMap((classId) => {
+              const danceClass = classes.find((item) => item.id === classId)
+              return danceClass ? [danceClass.name] : []
+            })
+            return {
+              ...payment,
+              classNames: classNames.length
+                ? [...new Set(classNames)]
+                : enrollment.passName.includes('개인')
+                  ? ['개인레슨']
+                  : ['수업 정보 없음'],
+              memberName: target.name,
+              passName: enrollment.passName,
+            }
+          }),
         )
       : []
     if (payments.length) setPaymentArchive((current) => [...current, ...payments])
@@ -2180,7 +2226,16 @@ function App() {
 
   function exportData() {
     const payload = JSON.stringify(
-      { members, classes, passTemplates, attendance, gigs, paymentArchive, waitlistClasses },
+      {
+        members,
+        classes,
+        passTemplates,
+        attendance,
+        gigs,
+        paymentArchive,
+        privateLessonCharges,
+        waitlistClasses,
+      },
       null,
       2,
     )
@@ -2275,6 +2330,7 @@ function App() {
           attendance?: AttendanceBook
           gigs?: Gig[]
           paymentArchive?: ArchivedPayment[]
+          privateLessonCharges?: PrivateLessonChargeBook
           waitlistClasses?: WaitlistClass[]
         }
         if (!saved.members?.length && !saved.classes?.length) {
@@ -2293,6 +2349,7 @@ function App() {
         if (saved.attendance) setAttendance(saved.attendance)
         if (saved.gigs?.length) setGigs(saved.gigs)
         if (saved.paymentArchive?.length) setPaymentArchive(saved.paymentArchive)
+        if (saved.privateLessonCharges) setPrivateLessonCharges(saved.privateLessonCharges)
         if (saved.waitlistClasses?.length) setWaitlistClasses(saved.waitlistClasses)
         notify('백업 가져오기가 완료되었습니다')
       } catch {
@@ -2325,6 +2382,7 @@ function App() {
           onExport={exportData}
           onExportCsv={exportCsv}
           onImport={importData}
+          onOpenSms={setSmsComposerMemberId}
           onOpenSchedule={openScheduleClass}
           onSaveSmsTemplates={saveSmsTemplates}
           setTab={setTab}
@@ -2412,11 +2470,13 @@ function App() {
       )}
       {tab === 'payments' && (
         <PaymentsView
+          classes={classes}
           gigs={gigs}
           members={activeMembers}
           paymentArchive={paymentArchive}
-          smsTemplates={smsTemplates}
           onNotify={notify}
+          onOpenSms={setSmsComposerMemberId}
+          onEndEnrollment={removeEnrollment}
           onQuickRenew={quickRenew}
           onRemovePayment={removePaymentRecord}
           onUpdateEnrollment={updateEnrollment}
@@ -2437,6 +2497,18 @@ function App() {
         >
           <Plus size={23} />
         </button>
+      )}
+
+      {smsComposerMemberId !== null && (
+        <SmsComposer
+          classes={classes}
+          initialMemberId={smsComposerMemberId}
+          members={activeMembers}
+          onClose={() => setSmsComposerMemberId(null)}
+          onCopy={copyText}
+          smsHref={smsHref}
+          templates={smsTemplates}
+        />
       )}
 
       {toast && (
@@ -2492,6 +2564,7 @@ function HomeView({
   onExport,
   onExportCsv,
   onImport,
+  onOpenSms,
   onOpenSchedule,
   onSaveSmsTemplates,
   setTab,
@@ -2512,9 +2585,10 @@ function HomeView({
   onExportCsv: () => void
   onImport: (file: File) => void
   onOpenSchedule: (classId: string) => void
-  onSaveSmsTemplates: (formData: FormData) => void
+  onOpenSms: (memberId: string) => void
+  onSaveSmsTemplates: (templates: readonly SmsTemplate[]) => void
   setTab: (tab: Tab) => void
-  smsTemplates: SmsTemplates
+  smsTemplates: readonly SmsTemplate[]
   sync: SyncControls
   todayClasses: DanceClass[]
   todayGigs: Gig[]
@@ -2674,13 +2748,14 @@ function HomeView({
                   <strong>{member.name}</strong>
                   <span>{enrollment.passName} · {enrollmentSummaryLabel(enrollment)}</span>
                 </div>
-                <a
+                <button
+                  type="button"
                   className="smsButton"
-                  href={smsHref(member.phone, smsTemplates.unpaid)}
+                  onClick={() => onOpenSms(member.id)}
                   aria-label={`${member.name} 문자`}
                 >
                   <MessageCircle size={17} />
-                </a>
+                </button>
                 <a className="callButton" href={`tel:${member.phone}`} aria-label={`${member.name} 전화`}>
                   <PhoneCall size={17} />
                 </a>
@@ -2724,13 +2799,14 @@ function HomeView({
                   {enrollment.passName} · 잔여 {enrollment.remainingCredits}회 · 재결제 안내
                 </span>
               </div>
-              <a
+              <button
+                type="button"
                 className="smsButton"
-                href={smsHref(member.phone, smsTemplates.lowCredit)}
+                onClick={() => onOpenSms(member.id)}
                 aria-label={`${member.name} 문자`}
               >
                 <MessageCircle size={17} />
-              </a>
+              </button>
               <a className="callButton" href={`tel:${member.phone}`} aria-label={`${member.name} 전화`}>
                 <PhoneCall size={17} />
               </a>
@@ -2745,13 +2821,14 @@ function HomeView({
                   {enrollment.passName} · 다음 결제 {enrollment.nextPaymentDue}
                 </span>
               </div>
-              <a
+              <button
+                type="button"
                 className="smsButton"
-                href={smsHref(member.phone, smsTemplates.expiring)}
+                onClick={() => onOpenSms(member.id)}
                 aria-label={`${member.name} 문자`}
               >
                 <MessageCircle size={17} />
-              </a>
+              </button>
               <a className="callButton" href={`tel:${member.phone}`} aria-label={`${member.name} 전화`}>
                 <PhoneCall size={17} />
               </a>
@@ -2789,15 +2866,20 @@ function HomeView({
       )}
 
       <div hidden={!showTools}>
-      <FormDrawer
-        key={smsTemplates.unpaid + smsTemplates.lowCredit + smsTemplates.expiring}
-        title="문자 템플릿"
-        hint="문자 버튼을 누르면 이 문구가 자동으로 채워집니다"
-        action={onSaveSmsTemplates}
-        submitLabel="템플릿 저장"
-      >
-        <SmsTemplateEditor onCopy={onCopyText} smsTemplates={smsTemplates} />
-      </FormDrawer>
+      <details className="formDrawer">
+        <summary>
+          <span>
+            <strong>문자 템플릿</strong>
+            <small>추가·수정·삭제</small>
+          </span>
+          <i className="drawerIcon" aria-hidden="true">
+            <ChevronRight size={16} />
+          </i>
+        </summary>
+        <div className="drawerBody">
+          <SmsTemplateSettings templates={smsTemplates} onChange={onSaveSmsTemplates} />
+        </div>
+      </details>
 
       <details className="formDrawer">
         <summary>
@@ -3475,7 +3557,7 @@ function TimeClassCard({
             onClick={() => {
               if (
                 window.confirm(
-                  `'${danceClass.name}' 수업을 시간표에서 삭제할까요?${isPrivateClass(danceClass) ? ' (삭제해도 횟수는 차감되지 않아요)' : ' (수강권은 유지됩니다)'}`,
+                    `'${danceClass.name}' 수업을 시간표에서 삭제할까요?${isPrivateClass(danceClass) ? ' (이미 자동 차감된 횟수는 복구됩니다)' : ' (수강권은 유지됩니다)'}`,
                 )
               ) {
                 onRemoveClass(danceClass.id)
@@ -5019,69 +5101,85 @@ function AttendanceView({
   setSelectedClassId: (classId: string) => void
 }) {
   const [statSearch, setStatSearch] = useState('')
-  // 출석 체크는 수강권을 먼저 고르고 → 날짜를 고르는 흐름.
-  // 수업(classId)은 수강권+날짜에서 자동으로 정해진다 (여러 개면 선택란 표시)
-  const [selectedPassId, setSelectedPassId] = useState('')
-
-  // 수업이 어느 수강권 소속인지 찾는다. 개인레슨 1회성 수업은 수강권에 직접 연결이
-  // 없으므로 회원의 개인레슨 수강권(enrollment) 배정을 보고 찾는다.
-  function passIdForClass(classId: string): string {
-    const direct = passTemplates.find((pass) => pass.classIds.includes(classId))
-    if (direct) return direct.id
-    const danceClass = classes.find((item) => item.id === classId)
-    if (danceClass && isPrivateClass(danceClass)) {
-      const privatePass = passTemplates.find(
-        (pass) =>
-          pass.type === 'private' &&
-          allMembers.some((member) =>
-            member.enrollments.some(
-              (enrollment) =>
-                enrollment.passName === pass.name && enrollment.classIds.includes(classId),
-            ),
-          ),
-      )
-      if (privatePass) return privatePass.id
-    }
-    return '__etc'
-  }
-
-  // 어떤 수강권에도 속하지 않는 수업 (예전 데이터·수강권 미지정) → '기타 수업'으로 접근
-  const unownedClasses = classes.filter((item) => passIdForClass(item.id) === '__etc')
-  const derivedPassId =
-    selectedPassId ||
-    (selectedClassId ? passIdForClass(selectedClassId) : '') ||
-    passTemplates[0]?.id ||
-    (unownedClasses.length ? '__etc' : '')
+  const initialPass = passTemplates.find((pass) => pass.classIds.includes(selectedClassId))
+  const [selectedPassId, setSelectedPassId] = useState(initialPass?.id ?? '')
+  const [category, setCategory] = useState<LessonType>(initialPass?.type ?? 'line_group')
+  const [selectedPrivateMemberId, setSelectedPrivateMemberId] = useState('')
+  const [viewMonth, setViewMonth] = useState(attendanceDate.slice(0, 7))
+  const categoryPasses = passTemplates.filter((pass) => pass.type === category)
+  const derivedPassId = categoryPasses.some((pass) => pass.id === selectedPassId)
+    ? selectedPassId
+    : categoryPasses[0]?.id ?? ''
   const currentPass = passTemplates.find((pass) => pass.id === derivedPassId)
-  const selectedWeekday = weekdayOfDateKey(attendanceDate)
-
-  // 선택한 수강권 + 날짜에서 출석 체크할 수 있는 수업 후보
+  const privateMembers = currentPass
+    ? allMembers.filter((member) =>
+        member.enrollments.some((enrollment) => enrollment.passName === currentPass.name),
+      )
+    : []
+  const derivedPrivateMemberId = privateMembers.some(
+    (member) => member.id === selectedPrivateMemberId,
+  )
+    ? selectedPrivateMemberId
+    : privateMembers[0]?.id ?? ''
+  const privateEnrollment = privateMembers
+    .find((member) => member.id === derivedPrivateMemberId)
+    ?.enrollments.find((enrollment) => enrollment.passName === currentPass?.name)
+  const groupClasses = currentPass
+    ? classes.filter(
+        (danceClass) =>
+          currentPass.classIds.includes(danceClass.id) && !isPrivateClass(danceClass),
+      )
+    : []
+  const dateOptions =
+    category === 'private'
+      ? [
+          ...new Set(
+            classes
+              .filter(
+                (danceClass) =>
+                  isPrivateClass(danceClass) &&
+                  Boolean(danceClass.date?.startsWith(viewMonth)) &&
+                  Boolean(privateEnrollment?.classIds.includes(danceClass.id)),
+              )
+              .flatMap((danceClass) => (danceClass.date ? [danceClass.date] : [])),
+          ),
+        ].sort()
+      : datesForWeekdays(
+          viewMonth,
+          [...new Set(groupClasses.map((danceClass) => danceClass.weekday))],
+        )
+  const selectedWeekday = attendanceDate ? weekdayOfDateKey(attendanceDate) : -1
   const candidates =
-    derivedPassId === '__etc'
-      ? unownedClasses.filter((item) => !item.date || item.date === attendanceDate)
-      : currentPass
-        ? currentPass.type === 'private'
-          ? classes.filter(
-              (item) =>
-                isPrivateClass(item) &&
-                item.date === attendanceDate &&
-                passIdForClass(item.id) === currentPass.id,
-            )
-          : classes.filter((item) => currentPass.classIds.includes(item.id))
-        : []
+    category === 'private'
+      ? classes.filter(
+          (danceClass) =>
+            isPrivateClass(danceClass) &&
+            danceClass.date === attendanceDate &&
+            Boolean(privateEnrollment?.classIds.includes(danceClass.id)),
+        )
+      : groupClasses.filter((danceClass) => danceClass.weekday === selectedWeekday)
   const activeClass = candidates.find((item) => item.id === selectedClassId)
 
-  // 수강권·날짜가 바뀌면 그 요일의 수업을 자동 선택한다
   useEffect(() => {
-    if (!candidates.length) return
-    const preferred =
-      candidates.find((item) => !item.date && item.weekday === selectedWeekday) ??
-      candidates.find((item) => item.id === selectedClassId) ??
-      candidates[0]
+    const nextDate = dateOptions.includes(attendanceDate) ? attendanceDate : dateOptions[0] ?? ''
+    if (nextDate !== attendanceDate) {
+      setAttendanceDate(nextDate)
+      return
+    }
+    if (!candidates.length) {
+      if (selectedClassId) setSelectedClassId('')
+      return
+    }
+    const preferred = candidates.find((item) => item.id === selectedClassId) ?? candidates[0]
     if (preferred.id !== selectedClassId) setSelectedClassId(preferred.id)
-    // 수강권·날짜 변경 시에만 자동 선택 (사용자가 고른 수업을 덮어쓰지 않도록)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [derivedPassId, attendanceDate, classes.length])
+  }, [
+    attendanceDate,
+    candidates,
+    dateOptions,
+    selectedClassId,
+    setAttendanceDate,
+    setSelectedClassId,
+  ])
   const monthKey = todayKey.slice(0, 7)
   const memberStats = allMembers
     .filter((member) =>
@@ -5124,61 +5222,139 @@ function AttendanceView({
     <section className="screen">
       <section className="panel">
         <h2>출석 체크</h2>
-        <div className="formGrid compact">
-        <Field label="수강권 (수강권 관리에서 만든 것)">
-          <select
-            value={derivedPassId}
-            onChange={(event) => setSelectedPassId(event.target.value)}
-            aria-label="수강권 선택"
-          >
-            {passTemplates.map((pass) => (
-              <option value={pass.id} key={pass.id}>
-                {pass.name}
-              </option>
+        <div className="attendancePicker">
+          <div className="attendanceCategories" role="tablist" aria-label="수업 카테고리">
+            {(
+              [
+                { label: '라인댄스 단체반', value: 'line_group' },
+                { label: '라틴댄스 단체반', value: 'latin_group' },
+                { label: '개인레슨', value: 'private' },
+              ] as const
+            ).map((option) => (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={category === option.value}
+                className={category === option.value ? 'active' : ''}
+                onClick={() => {
+                  setCategory(option.value)
+                  setSelectedPassId('')
+                  setSelectedPrivateMemberId('')
+                }}
+                key={option.value}
+              >
+                {option.label}
+              </button>
             ))}
-            {unownedClasses.length > 0 && <option value="__etc">기타 수업</option>}
-          </select>
-        </Field>
-        <Field label="날짜 (‹ › 로 하루씩 이동)">
-          <div className="dateStepper">
-            <button
-              type="button"
-              aria-label="전날"
-              onClick={() => setAttendanceDate(addDaysFrom(attendanceDate, -1))}
-            >
-              ‹
-            </button>
-            <input
-              type="date"
-              value={attendanceDate}
-              onChange={(event) => setAttendanceDate(event.target.value)}
-            />
-            <button
-              type="button"
-              aria-label="다음날"
-              onClick={() => setAttendanceDate(addDaysFrom(attendanceDate, 1))}
-            >
-              ›
-            </button>
           </div>
-        </Field>
-        {candidates.length > 1 && (
-          <Field label="수업">
-            <select
-              value={selectedClassId}
-              onChange={(event) => setSelectedClassId(event.target.value)}
-              aria-label="수업 선택"
-            >
-              {candidates.map((danceClass) => (
-                <option value={danceClass.id} key={danceClass.id}>
-                  {danceClass.date
-                    ? `${danceClass.startTime} ${danceClass.name}`
-                    : `${weekdays[danceClass.weekday]}요일 ${danceClass.startTime} ${danceClass.name}`}
-                </option>
+
+          <div className="attendanceChoiceGroup">
+            <strong>수강권</strong>
+            <div className="attendanceChoiceChips">
+              {categoryPasses.map((pass) => (
+                <button
+                  type="button"
+                  className={derivedPassId === pass.id ? 'active' : ''}
+                  onClick={() => {
+                    setSelectedPassId(pass.id)
+                    setSelectedPrivateMemberId('')
+                  }}
+                  key={pass.id}
+                >
+                  {pass.name}
+                </button>
               ))}
-            </select>
-          </Field>
-        )}
+            </div>
+            {!categoryPasses.length && <p className="emptyText">이 카테고리의 수강권이 없습니다.</p>}
+          </div>
+
+          {category === 'private' && currentPass && (
+            <div className="attendanceChoiceGroup">
+              <strong>회원</strong>
+              <div className="attendanceChoiceChips">
+                {privateMembers.map((member) => (
+                  <button
+                    type="button"
+                    className={derivedPrivateMemberId === member.id ? 'active' : ''}
+                    onClick={() => setSelectedPrivateMemberId(member.id)}
+                    key={member.id}
+                  >
+                    {member.name}
+                  </button>
+                ))}
+              </div>
+              {!privateMembers.length && (
+                <p className="emptyText">이 수강권을 가진 회원이 없습니다.</p>
+              )}
+            </div>
+          )}
+
+          {currentPass && (category !== 'private' || derivedPrivateMemberId) && (
+            <div className="attendanceChoiceGroup">
+              <div className="attendanceMonthHead">
+                <strong>
+                  {Number(viewMonth.slice(0, 4))}년 {Number(viewMonth.slice(5, 7))}월 수업 날짜
+                </strong>
+                <div>
+                  <button
+                    type="button"
+                    aria-label="이전 달"
+                    title="이전 달"
+                    onClick={() => setViewMonth(shiftMonth(viewMonth, -1))}
+                  >
+                    <ChevronLeft size={17} />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="다음 달"
+                    title="다음 달"
+                    onClick={() => setViewMonth(shiftMonth(viewMonth, 1))}
+                  >
+                    <ChevronRight size={17} />
+                  </button>
+                </div>
+              </div>
+              <div className="attendanceDateGrid">
+                {dateOptions.map((date) => (
+                  <button
+                    type="button"
+                    className={attendanceDate === date ? 'active' : ''}
+                    aria-label={`${date} ${weekdays[weekdayOfDateKey(date)]}요일`}
+                    onClick={() => setAttendanceDate(date)}
+                    key={date}
+                  >
+                    <b>{Number(date.slice(8, 10))}</b>
+                    <span>{weekdays[weekdayOfDateKey(date)]}</span>
+                  </button>
+                ))}
+              </div>
+              {!dateOptions.length && (
+                <p className="emptyText">
+                  {category === 'private'
+                    ? '이 달에 예약된 개인레슨이 없습니다.'
+                    : '이 달에 연결된 수업 날짜가 없습니다.'}
+                </p>
+              )}
+            </div>
+          )}
+
+          {candidates.length > 1 && (
+            <div className="attendanceChoiceGroup">
+              <strong>수업</strong>
+              <div className="attendanceChoiceChips">
+                {candidates.map((danceClass) => (
+                  <button
+                    type="button"
+                    className={selectedClassId === danceClass.id ? 'active' : ''}
+                    onClick={() => setSelectedClassId(danceClass.id)}
+                    key={danceClass.id}
+                  >
+                    {danceClass.startTime} {danceClass.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
         {activeClass ? (
           <p className="hint">
@@ -5194,19 +5370,23 @@ function AttendanceView({
               : '이 수강권에 연결된 수업이 없어요.'}
           </p>
         )}
-        {activeClass && (
+        {activeClass && !isPrivateClass(activeClass) && (
           <div className="attendanceSummary">
             <span className="ok">출석 {summary.present}</span>
             <span className="danger">결석 {summary.absent}</span>
             <span>미체크 {summary.unchecked}</span>
           </div>
         )}
-        <p className="hint ruleHint">출석 체크 = 해당 수강권 1회 차감 (되돌리면 복구)</p>
+        <p className="hint ruleHint">
+          {category === 'private'
+            ? '개인레슨은 출석 체크 없이 날짜가 지나면 수강권에서 1회 자동 차감됩니다.'
+            : '출석 체크 = 해당 수강권 1회 차감 (되돌리면 복구)'}
+        </p>
       </section>
 
       <section className="panel">
-        <h2>수강 회원</h2>
-        {activeClass && summary.unchecked > 0 && (
+        <h2>{category === 'private' ? '예약 회원' : '수강 회원'}</h2>
+        {activeClass && !isPrivateClass(activeClass) && summary.unchecked > 0 && (
           <button type="button" className="markAllButton" onClick={onMarkAllPresent}>
             미체크 {summary.unchecked}명 전체 출석 처리
           </button>
@@ -5220,10 +5400,17 @@ function AttendanceView({
                 <div>
                   <strong>{member.name}</strong>
                   <span className={status ? `state-${status}` : ''}>
-                    {status ? attendanceLabel(status) : '미체크'}
+                    {activeClass && isPrivateClass(activeClass)
+                      ? activeClass.date && activeClass.date < todayKey
+                        ? '자동 차감 완료'
+                        : '자동 차감 예정'
+                      : status
+                        ? attendanceLabel(status)
+                        : '미체크'}
                     {enrollment && ` · ${enrollmentSummaryLabel(enrollment)}`}
                   </span>
                 </div>
+                {activeClass && !isPrivateClass(activeClass) && (
                 <div className="segmented two">
                   <button
                     type="button"
@@ -5240,6 +5427,7 @@ function AttendanceView({
                     결석
                   </button>
                 </div>
+                )}
               </article>
             )
           })}
@@ -5309,7 +5497,26 @@ function AttendanceView({
                   passTemplates={passTemplates}
                   records={records}
                   onJump={(classId, date) => {
-                    setSelectedPassId(passIdForClass(classId))
+                    const directPass = passTemplates.find((pass) =>
+                      pass.classIds.includes(classId),
+                    )
+                    const jumpPass =
+                      directPass ??
+                      passTemplates.find(
+                        (pass) =>
+                          pass.type === 'private' &&
+                          member.enrollments.some(
+                            (enrollment) =>
+                              enrollment.passName === pass.name &&
+                              enrollment.classIds.includes(classId),
+                          ),
+                      )
+                    if (jumpPass) {
+                      setCategory(jumpPass.type)
+                      setSelectedPassId(jumpPass.id)
+                      if (jumpPass.type === 'private') setSelectedPrivateMemberId(member.id)
+                    }
+                    setViewMonth(date.slice(0, 7))
                     setSelectedClassId(classId)
                     setAttendanceDate(date)
                     window.scrollTo({ behavior: 'smooth', top: 0 })
@@ -5436,25 +5643,27 @@ function AttendanceHistoryDetails({
 }
 
 function PaymentsView({
+  classes,
   gigs,
   members,
   paymentArchive,
-  smsTemplates,
+  onEndEnrollment,
   onNotify,
+  onOpenSms,
   onQuickRenew,
   onRemovePayment,
   onUpdateEnrollment,
 }: {
+  classes: DanceClass[]
   gigs: Gig[]
   members: Member[]
   paymentArchive: ArchivedPayment[]
-  smsTemplates: SmsTemplates
+  onEndEnrollment: (memberId: string, enrollmentId: string) => void
   onNotify: (message: string) => void
+  onOpenSms: (memberId: string) => void
   onQuickRenew: (memberId: string, enrollmentId: string) => void
   onRemovePayment: (
-    ref:
-      | { kind: 'member'; memberId: string; enrollmentId: string }
-      | { kind: 'archive'; index: number },
+    ref: PaymentSourceRef,
     record: PaymentRecord,
   ) => void
   onUpdateEnrollment: (memberId: string, enrollmentId: string, formData: FormData) => void
@@ -5471,50 +5680,32 @@ function PaymentsView({
   const monthKey = todayKey.slice(0, 7)
   // 현재 회원의 결제 + 삭제된 수강권/회원의 보존 기록을 합쳐 매출을 집계한다.
   // ref는 수납 내역에서 잘못된 기록 1건을 지울 때 원본을 찾는 데 쓴다.
-  const allPayments = [
-    ...members.flatMap((member) =>
-      member.enrollments.flatMap((enrollment) =>
-        enrollment.payments.map((payment) => ({
-          ...payment,
-          memberName: member.name,
-          passName: enrollment.passName,
-          ref: {
-            kind: 'member' as const,
-            memberId: member.id,
-            enrollmentId: enrollment.id,
-          },
-        })),
-      ),
-    ),
-    ...paymentArchive.map((payment, index) => ({
-      ...payment,
-      ref: { kind: 'archive' as const, index },
-    })),
-  ].sort((a, b) => b.date.localeCompare(a.date))
-  const monthTotal = allPayments
-    .filter((payment) => payment.date.startsWith(monthKey))
-    .reduce((sum, payment) => sum + payment.amount, 0)
+  const allPayments = buildPaymentLedger(members, paymentArchive, classes)
+  const receivedPayments = allPayments.filter((payment) => payment.date <= todayKey)
+  const incomeSummary = calculateIncomeSummary(allPayments, gigs, todayKey)
+  const monthPayments = receivedPayments.filter((payment) => payment.date.startsWith(monthKey))
+  const monthTotal = incomeSummary.monthPaymentTotal
   const lastMonthDate = new Date(today.getFullYear(), today.getMonth() - 1, 1)
   const lastMonthKey = `${lastMonthDate.getFullYear()}-${String(lastMonthDate.getMonth() + 1).padStart(2, '0')}`
   const lastMonthTotal = allPayments
     .filter((payment) => payment.date.startsWith(lastMonthKey))
     .reduce((sum, payment) => sum + payment.amount, 0)
-  const monthCount = allPayments.filter((payment) => payment.date.startsWith(monthKey)).length
+  const monthCount = monthPayments.length
   const unpaidTotal = members
     .flatMap((member) => member.enrollments)
     .filter((enrollment) => enrollmentStatus(enrollment) === 'unpaid')
     .reduce((sum, enrollment) => sum + enrollment.paidAmount, 0)
-  const paidMonthKeys = [...new Set(allPayments.map((payment) => payment.date.slice(0, 7)))]
+  const paidMonthKeys = [...new Set(receivedPayments.map((payment) => payment.date.slice(0, 7)))]
   const monthlyAverage = paidMonthKeys.length
     ? Math.round(
-        allPayments.reduce((sum, payment) => sum + payment.amount, 0) / paidMonthKeys.length,
+        receivedPayments.reduce((sum, payment) => sum + payment.amount, 0) / paidMonthKeys.length,
       )
     : 0
   // 이번 달 외부 강의는 '오늘까지 한 것'만 수입으로 잡고, 남은 스케줄은 예정으로 따로 보여준다
   const monthGigs = gigs.filter(
     (gig) => gig.date.startsWith(monthKey) && gig.date <= todayKey,
   )
-  const monthGigTotal = monthGigs.reduce((sum, gig) => sum + gig.fee, 0)
+  const monthGigTotal = incomeSummary.monthGigTotal
   const upcomingGigs = gigs.filter(
     (gig) => gig.date.startsWith(monthKey) && gig.date > todayKey,
   )
@@ -5555,27 +5746,21 @@ function PaymentsView({
         a.member.name.localeCompare(b.member.name, 'ko'),
     )
   const soonTotal = soonList.reduce((sum, item) => sum + item.enrollment.paidAmount, 0)
-  // 올해 누적 수입 (회비 + 외부 강의)
-  const yearKey = todayKey.slice(0, 4)
-  const yearTotal =
-    allPayments
-      .filter((payment) => payment.date.startsWith(yearKey))
-      .reduce((sum, payment) => sum + payment.amount, 0) +
-    gigs
-      .filter((gig) => gig.date.startsWith(yearKey))
-      .reduce((sum, gig) => sum + gig.fee, 0)
+  const yearTotal = incomeSummary.yearActualTotal
 
   // 정산·세금 신고용: 회비 + 외부 강의 수입 전체를 엑셀(CSV)로 내보낸다
   function exportIncomeCsv() {
     const rows: Array<Array<string | number>> = [
-      ...allPayments.map((payment) => [
+      ...receivedPayments.map((payment) => [
         payment.date,
         '회비',
         payment.memberName,
         payment.passName,
         payment.amount,
       ]),
-      ...gigs.map((gig) => [gig.date, '외부 강의', gig.name, '', gig.fee]),
+      ...gigs
+        .filter((gig) => gig.date <= todayKey)
+        .map((gig) => [gig.date, '외부 강의', gig.name, '', gig.fee]),
     ].sort((a, b) => String(b[0]).localeCompare(String(a[0])))
     const csv =
       '﻿' +
@@ -5593,13 +5778,14 @@ function PaymentsView({
   }
   // 월별 수입 (회비 + 외부 강의) — 최근 6개월
   const incomeByMonth = new Map<string, { fees: number; gigs: number }>()
-  for (const payment of allPayments) {
+  for (const payment of receivedPayments) {
     const key = payment.date.slice(0, 7)
     const row = incomeByMonth.get(key) ?? { fees: 0, gigs: 0 }
     row.fees += payment.amount
     incomeByMonth.set(key, row)
   }
   for (const gig of gigs) {
+    if (gig.date > todayKey) continue
     const key = gig.date.slice(0, 7)
     const row = incomeByMonth.get(key) ?? { fees: 0, gigs: 0 }
     row.gigs += gig.fee
@@ -5608,8 +5794,8 @@ function PaymentsView({
   const incomeMonths = [...incomeByMonth.keys()].sort((a, b) => b.localeCompare(a)).slice(0, 6)
   const visiblePayments =
     logMonth === 'all'
-      ? allPayments
-      : allPayments.filter((payment) =>
+      ? receivedPayments
+      : receivedPayments.filter((payment) =>
           payment.date.startsWith(logMonth === 'this' ? monthKey : lastMonthKey),
         )
   const visibleTotal = visiblePayments.reduce((sum, payment) => sum + payment.amount, 0)
@@ -5629,6 +5815,51 @@ function PaymentsView({
 
   return (
     <section className="screen">
+      <section className="panel monthlyPaymentLedger" aria-label="이번 달 입금 내역">
+        <div className="ledgerHeading">
+          <div>
+            <h2>이번 달 입금 내역</h2>
+            <p className="hint">실제 입금일 최신순</p>
+          </div>
+          <strong>{formatCurrency(monthTotal)}</strong>
+        </div>
+        <div className="listStack">
+          {monthPayments.map((payment) => (
+            <div
+              className="paymentLogRow"
+              key={`${payment.ref.kind}-${payment.sourceOrder}`}
+            >
+              <span className="paymentLogDate">{payment.date.slice(5).replace('-', '/')}</span>
+              <strong>
+                {payment.memberName}
+                <small> · {payment.passName}</small>
+                <small className="paymentClassName">{payment.classNames.join(' · ')}</small>
+              </strong>
+              <b>{formatCurrency(payment.amount)}</b>
+              <button
+                type="button"
+                className="paymentLogDelete"
+                aria-label={`${payment.memberName} ${payment.date} 수납 기록 삭제`}
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      `${payment.date} ${payment.memberName} ${formatCurrency(payment.amount)} 수납 기록을 삭제할까요?\n(매출 합계에서 빠져요)`,
+                    )
+                  ) {
+                    onRemovePayment(payment.ref, { amount: payment.amount, date: payment.date })
+                  }
+                }}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+          {!monthPayments.length && (
+            <p className="emptyText">이번 달에 기록된 입금이 없습니다.</p>
+          )}
+        </div>
+      </section>
+
       <section className="paymentHero">
         <p>이번 달 총 수입 (회비 + 외부 강의)</p>
         <strong>{formatCurrency(monthTotal + monthGigTotal)}</strong>
@@ -5646,7 +5877,10 @@ function PaymentsView({
           </span>
         )}
         <span>지난달 총 {formatCurrency(lastMonthTotal + lastMonthGigTotal)}</span>
-        <span>올해 누적 {formatCurrency(yearTotal)}</span>
+        <span>올해 실제 수입 {formatCurrency(yearTotal)}</span>
+        {incomeSummary.futureScheduledTotal > 0 && (
+          <span>예정 수입 {formatCurrency(incomeSummary.futureScheduledTotal)}</span>
+        )}
         <span>월 평균 회비 {formatCurrency(monthlyAverage)}</span>
         <span>완납 {counts.paid} · 임박 {counts.soon} · 미납 {counts.unpaid}</span>
         {unpaidTotal > 0 && (
@@ -5687,13 +5921,14 @@ function PaymentsView({
                   </small>
                   <b>{formatCurrency(enrollment.paidAmount)}</b>
                 </button>
-                <a
+                <button
+                  type="button"
                   className="smsButton"
-                  href={smsHref(member.phone, smsTemplates.unpaid)}
+                  onClick={() => onOpenSms(member.id)}
                   aria-label={`${member.name} 문자`}
                 >
                   <MessageCircle size={17} />
-                </a>
+                </button>
                 <a
                   className="callButton"
                   href={`tel:${member.phone}`}
@@ -5728,13 +5963,14 @@ function PaymentsView({
                   </small>
                   <b>{formatCurrency(enrollment.paidAmount)}</b>
                 </button>
-                <a
+                <button
+                  type="button"
                   className="smsButton"
-                  href={smsHref(member.phone, smsTemplates.expiring)}
+                  onClick={() => onOpenSms(member.id)}
                   aria-label={`${member.name} 문자`}
                 >
                   <MessageCircle size={17} />
-                </a>
+                </button>
                 <a
                   className="callButton"
                   href={`tel:${member.phone}`}
@@ -5872,6 +6108,23 @@ function PaymentsView({
                       >
                         재결제 받음 (완납 처리)
                       </button>
+                      {status === 'unpaid' && (
+                        <button
+                          type="button"
+                          className="endEnrollmentButton"
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                `${member.name}님의 '${enrollment.passName}' 수강을 종료할까요?\n\n미납 목록에서는 빠지고, 기존 입금·출석 이력은 그대로 보존됩니다.`,
+                              )
+                            ) {
+                              onEndEnrollment(member.id, enrollment.id)
+                            }
+                          }}
+                        >
+                          미납 수강 종료
+                        </button>
+                      )}
                       <div className="paymentEditor">
                         <button
                           type="button"
@@ -5990,6 +6243,7 @@ function PaymentsView({
               <strong>
                 {payment.memberName}
                 <small> · {payment.passName}</small>
+                <small className="paymentClassName">{payment.classNames.join(' · ')}</small>
               </strong>
               <b>{formatCurrency(payment.amount)}</b>
               <button
@@ -6054,55 +6308,6 @@ function PaymentsView({
         </section>
       )}
     </section>
-  )
-}
-
-function SmsTemplateEditor({
-  onCopy,
-  smsTemplates,
-}: {
-  onCopy: (text: string) => void
-  smsTemplates: SmsTemplates
-}) {
-  const unpaidRef = useRef<HTMLTextAreaElement | null>(null)
-  const lowCreditRef = useRef<HTMLTextAreaElement | null>(null)
-  const expiringRef = useRef<HTMLTextAreaElement | null>(null)
-  const fields: Array<{
-    label: string
-    name: keyof SmsTemplates
-    ref: React.MutableRefObject<HTMLTextAreaElement | null>
-  }> = [
-    { label: '미납 안내', name: 'unpaid', ref: unpaidRef },
-    { label: '재등록 안내', name: 'lowCredit', ref: lowCreditRef },
-    { label: '결제일 임박 안내', name: 'expiring', ref: expiringRef },
-  ]
-
-  return (
-    <>
-      <p className="hint ruleHint">
-        자주 쓰는 안내 문구를 저장해 두고, 전체 복사해서 문자·카톡에 붙여넣으세요.
-      </p>
-      {fields.map((field) => (
-        <div className="field" key={field.name}>
-          <div className="labelRow">
-            <span>{field.label}</span>
-            <button
-              type="button"
-              className="copyButton"
-              onClick={() => onCopy(field.ref.current?.value ?? '')}
-            >
-              전체 복사
-            </button>
-          </div>
-          <textarea
-            name={field.name}
-            defaultValue={smsTemplates[field.name]}
-            rows={3}
-            ref={field.ref}
-          />
-        </div>
-      ))}
-    </>
   )
 }
 

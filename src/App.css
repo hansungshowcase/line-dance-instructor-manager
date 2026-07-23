@@ -491,6 +491,127 @@ button.rowItem:active {
   transform: scale(0.92);
 }
 
+.smsTemplateSettings,
+.smsTemplateItem,
+.smsTemplateAdd {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.smsTemplateItem {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 14px;
+}
+
+.smsTemplateItem label,
+.smsTemplateAdd label,
+.smsComposer label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--sub);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.smsTemplateDelete {
+  align-self: flex-end;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  color: var(--danger);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.smsTemplateAdd {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.smsTemplateAdd .primaryButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.modalBackdrop {
+  position: fixed;
+  z-index: 80;
+  inset: 0;
+  display: grid;
+  place-items: end center;
+  background: rgba(38, 40, 46, 0.45);
+  padding: 16px;
+}
+
+.smsComposer {
+  width: min(100%, 448px);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  padding: 18px;
+  box-shadow: var(--shadow-raised);
+}
+
+.smsComposer header,
+.smsComposerActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.smsComposer header {
+  margin-bottom: 14px;
+}
+
+.smsComposer h2 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.smsComposer header button {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+}
+
+.smsComposer label + label {
+  margin-top: 12px;
+}
+
+.smsComposerActions {
+  margin-top: 14px;
+}
+
+.smsComposerActions button,
+.smsComposerActions a {
+  flex: 1;
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-radius: var(--radius-md);
+  background: var(--primary);
+  color: white;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.smsComposerActions button:first-child {
+  border: 1px solid var(--line-strong);
+  background: white;
+  color: var(--ink);
+}
+
 .classPicker {
   display: flex;
   flex-direction: column;
@@ -2038,6 +2159,14 @@ button {
   font-weight: 500;
 }
 
+.paymentLogRow strong .paymentClassName {
+  display: block;
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .memberEditForm {
   border-top: 1px solid var(--line);
   padding: 16px;
@@ -2611,6 +2740,132 @@ button {
 
 /* ---------- 결제 ---------- */
 
+.monthlyPaymentLedger {
+  border-color: rgba(93, 123, 247, 0.3);
+}
+
+.attendancePicker,
+.attendanceChoiceGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.attendanceCategories,
+.attendanceChoiceChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.attendanceCategories button,
+.attendanceChoiceChips button {
+  min-height: 42px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: white;
+  padding: 8px 12px;
+  color: var(--sub);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.attendanceCategories button.active,
+.attendanceChoiceChips button.active {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary-deep);
+}
+
+.attendanceChoiceGroup {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.attendanceChoiceGroup > strong {
+  color: var(--sub);
+  font-size: 13px;
+}
+
+.attendanceMonthHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.attendanceMonthHead > strong {
+  font-size: 14px;
+}
+
+.attendanceMonthHead > div {
+  display: flex;
+  gap: 6px;
+}
+
+.attendanceMonthHead button {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: white;
+  color: var(--ink);
+}
+
+.attendanceDateGrid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.attendanceDateGrid button {
+  min-width: 0;
+  min-height: 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: white;
+  color: var(--sub);
+}
+
+.attendanceDateGrid button b {
+  font-size: 14px;
+}
+
+.attendanceDateGrid button span {
+  font-size: 11px;
+}
+
+.attendanceDateGrid button.active {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: white;
+}
+
+.ledgerHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ledgerHeading h2,
+.ledgerHeading p {
+  margin: 0;
+}
+
+.ledgerHeading > strong {
+  flex: 0 0 auto;
+  color: var(--primary-deep);
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+}
+
 .paymentHero {
   border-radius: var(--radius-lg);
   padding: 20px;
@@ -3134,6 +3389,22 @@ button {
 
 .renewButton.subtle:active {
   background: var(--soft);
+}
+
+.endEnrollmentButton {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 8px;
+  border: 1px solid rgba(224, 73, 47, 0.3);
+  border-radius: var(--radius-md);
+  background: white;
+  color: var(--danger);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.endEnrollmentButton:active {
+  background: var(--danger-soft);
 }
 
 .markAllButton {

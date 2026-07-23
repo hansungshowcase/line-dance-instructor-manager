@@ -78,6 +78,7 @@ test('instructor can manage classes, members, attendance, and payment details', 
   ).toBeVisible()
 
   await page.getByRole('button', { name: '출석', exact: true }).click()
+  await page.getByRole('button', { name: '초급 라인댄스 월수강권', exact: true }).click()
   const newMemberRow = page.locator('.attendanceRow').filter({ hasText: '최하은' })
   await expect(newMemberRow).toBeVisible()
   await newMemberRow.getByRole('button', { name: '출석', exact: true }).click()
@@ -171,24 +172,15 @@ test('gig end-time & edit, private lesson quick-add rules, custom waitlist class
   await page.getByRole('button', { name: /1명 레슨 만들기/ }).click()
   const privateCard = page.locator('.timeClassCard').filter({ hasText: '이정아 개인레슨' })
   await expect(privateCard).toBeVisible()
-  // 개인레슨 카드에는 출석 체크 버튼이 없다 (차감은 출석 탭에서만)
   await expect(privateCard.getByRole('button', { name: /출석/ })).toHaveCount(0)
 
-  // 출석 탭: 수강권을 먼저 고르면 그 수강권의 수업으로 출석 체크 → 잔여 8회에서 7회로 차감
   await page.getByRole('button', { name: '출석', exact: true }).click()
-  await page.getByLabel('수강권 선택').selectOption({ label: '개인레슨 10회권' })
+  await page.getByRole('tab', { name: '개인레슨' }).click()
+  await page.getByRole('button', { name: '개인레슨 10회권', exact: true }).click()
+  await page.getByRole('button', { name: '이정아', exact: true }).click()
   const lessonRow = page.locator('.attendanceRow').filter({ hasText: '이정아' })
-  await lessonRow.getByRole('button', { name: '출석', exact: true }).click()
-  await expect(lessonRow.getByText(/잔여 7\/10회/)).toBeVisible()
-
-  // 수강권별 이력 필터: 이정아는 수강권 2개 → 칩으로 수강권별 이력만 걸러 본다
-  const leeStatEarly = page.locator('.memberStatRow').filter({ hasText: '이정아' })
-  await leeStatEarly.locator('summary.statSummary').click()
-  await leeStatEarly.locator('details.historyDetails summary').click()
-  await leeStatEarly.getByRole('button', { name: '개인레슨 10회권', exact: true }).click()
-  await expect(leeStatEarly.locator('.historyDetails li')).toHaveCount(1)
-  await leeStatEarly.getByRole('button', { name: '중급 라인댄스 10회권', exact: true }).click()
-  await expect(leeStatEarly.getByText('이 수강권의 출석 이력이 없어요.')).toBeVisible()
+  await expect(lessonRow.getByText(/자동 차감 예정/)).toBeVisible()
+  await expect(lessonRow.getByRole('button', { name: '출석', exact: true })).toHaveCount(0)
 
   // ── 시간표에서 레슨을 삭제하면 출석 기록이 없던 일이 되고 잔여도 8회로 복구된다
   await page.getByRole('button', { name: '시간표', exact: true }).click()
@@ -202,23 +194,21 @@ test('gig end-time & edit, private lesson quick-add rules, custom waitlist class
     leeStat.locator('.statPassLine').filter({ hasText: '개인레슨 10회권' }).locator('b'),
   ).toHaveText('잔여 8/10회')
 
-  // 날짜별 이력 10개씩 더 보기: 김미영에게 12일치 출석을 만든다
-  const dateKey = (offset: number) => {
-    const d = new Date()
-    d.setDate(d.getDate() + offset)
-    const pad = (n: number) => String(n).padStart(2, '0')
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+  await page.getByRole('tab', { name: '라인댄스 단체반' }).click()
+  await page.getByRole('button', { name: '초급 라인댄스 월수강권', exact: true }).click()
+  let checkedDates = 0
+  for (let monthOffset = 0; monthOffset < 4 && checkedDates < 12; monthOffset++) {
+    const monthDates = page.locator('.attendanceDateGrid button')
+    const count = await monthDates.count()
+    for (let index = 0; index < count && checkedDates < 12; index++) {
+      await monthDates.nth(index).click()
+      const kimRow = page.locator('.attendanceRow').filter({ hasText: '김미영' })
+      await kimRow.getByRole('button', { name: '출석', exact: true }).click()
+      checkedDates += 1
+    }
+    if (checkedDates < 12) await page.getByRole('button', { name: '다음 달' }).click()
   }
-  await page.getByLabel('수강권 선택').selectOption({ label: '초급 라인댄스 월수강권' })
-  const dateInput = page.locator('.dateStepper input')
-  for (let offset = 20; offset >= 9; offset--) {
-    await dateInput.fill(dateKey(-offset))
-    await page
-      .locator('.attendanceRow')
-      .filter({ hasText: '김미영' })
-      .getByRole('button', { name: '출석', exact: true })
-      .click()
-  }
+  expect(checkedDates).toBe(12)
   const kimStat = page.locator('.memberStatRow').filter({ hasText: '김미영' })
   await kimStat.locator('summary.statSummary').click()
   await kimStat.locator('details.historyDetails summary').click()
@@ -236,7 +226,8 @@ test('gig end-time & edit, private lesson quick-add rules, custom waitlist class
 
   // 수납 기록 개별 삭제: 잘못 잡힌 매출을 ✕로 지울 수 있다 (데모 시드 3건 → 2건)
   await page.getByRole('button', { name: '전체', exact: true }).click()
-  const logRows = page.locator('.paymentLogRow')
+  const paymentLogPanel = page.locator('section.panel').filter({ hasText: '수납 내역' })
+  const logRows = paymentLogPanel.locator('.paymentLogRow')
   await expect(logRows).toHaveCount(3)
   await logRows.first().locator('.paymentLogDelete').click()
   await expect(logRows).toHaveCount(2)
@@ -245,7 +236,10 @@ test('gig end-time & edit, private lesson quick-add rules, custom waitlist class
   const kimPay = page.locator('.paymentCard').filter({ hasText: '김미영' })
   await kimPay.locator('details.enrollPayBlock summary').first().click()
   await kimPay.getByRole('button', { name: '결제 정보 수정' }).click()
-  await kimPay.locator('input[name="lastPaidAt"]').fill(dateKey(-5))
+  const movedDate = new Date()
+  movedDate.setDate(movedDate.getDate() - 5)
+  const movedDateKey = `${movedDate.getFullYear()}-${String(movedDate.getMonth() + 1).padStart(2, '0')}-${String(movedDate.getDate()).padStart(2, '0')}`
+  await kimPay.locator('input[name="lastPaidAt"]').fill(movedDateKey)
   await kimPay.getByRole('button', { name: '저장' }).click()
   await expect(logRows).toHaveCount(2)
 
@@ -296,5 +290,5 @@ test('deleting a pass removes its classes from the timetable and pickers', async
 
   // 출석 탭 수업 선택란에서도 사라진다
   await page.getByRole('button', { name: '출석', exact: true }).click()
-  await expect(page.locator('select option', { hasText: '초급 라인댄스' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '초급 라인댄스 월수강권', exact: true })).toHaveCount(0)
 })
