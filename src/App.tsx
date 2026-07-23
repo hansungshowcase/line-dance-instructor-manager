@@ -462,6 +462,20 @@ function smsHref(phone: string, body: string) {
   return `sms:${phone}${separator}body=${encodeURIComponent(body)}`
 }
 
+function formatPhoneNumber(value: string) {
+  const trimmed = value.trim()
+  const digits = trimmed.replace(/\D/g, '')
+  if (digits.length === 11) return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`
+  if (digits.length === 10 && digits.startsWith('02')) {
+    return `${digits.slice(0, 2)}-${digits.slice(2, 6)}-${digits.slice(6)}`
+  }
+  if (digits.length === 10) return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`
+  if (digits.length === 9 && digits.startsWith('02')) {
+    return `${digits.slice(0, 2)}-${digits.slice(2, 5)}-${digits.slice(5)}`
+  }
+  return trimmed
+}
+
 // 수강권에서 새 등록(Enrollment)을 만든다: 그룹 3개월 유효, 개인레슨은 기간 없음
 function enrollmentFromPass(pass: PassTemplate): Enrollment {
   return {
@@ -656,11 +670,43 @@ type LegacyMember = {
   passUntil?: string
 }
 
+function reconcileEnrollmentPaymentHistory(enrollment: Enrollment): Enrollment {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(enrollment.lastPaidAt) || enrollment.paidAmount <= 0) {
+    return enrollment
+  }
+  const latestPaymentIndex = enrollment.payments.reduce(
+    (latestIndex, payment, index, payments) =>
+      latestIndex < 0 || payment.date >= payments[latestIndex].date ? index : latestIndex,
+    -1,
+  )
+  if (latestPaymentIndex < 0) {
+    return {
+      ...enrollment,
+      payments: [{ amount: enrollment.paidAmount, date: enrollment.lastPaidAt }],
+    }
+  }
+  const latestPayment = enrollment.payments[latestPaymentIndex]
+  if (
+    latestPayment.date === enrollment.lastPaidAt &&
+    latestPayment.amount === enrollment.paidAmount
+  ) {
+    return enrollment
+  }
+  return {
+    ...enrollment,
+    payments: enrollment.payments.map((payment, index) =>
+      index === latestPaymentIndex
+        ? { ...payment, date: enrollment.lastPaidAt }
+        : payment,
+    ),
+  }
+}
+
 function normalizeMember(raw: LegacyMember): Member {
   const base = {
     id: raw.id,
     name: raw.name,
-    phone: raw.phone,
+    phone: formatPhoneNumber(raw.phone),
     status: raw.status,
     note: raw.note ?? '',
     consultedAt: raw.consultedAt,
@@ -668,7 +714,10 @@ function normalizeMember(raw: LegacyMember): Member {
     source: raw.source,
   }
   if (Array.isArray(raw.enrollments)) {
-    return { ...base, enrollments: raw.enrollments }
+    return {
+      ...base,
+      enrollments: raw.enrollments.map(reconcileEnrollmentPaymentHistory),
+    }
   }
   const hasLegacyPass =
     (raw.classIds?.length ?? 0) > 0 ||
@@ -679,7 +728,7 @@ function normalizeMember(raw: LegacyMember): Member {
     ...base,
     enrollments: hasLegacyPass
       ? [
-          {
+          reconcileEnrollmentPaymentHistory({
             id: makeId('enr'),
             passName:
               raw.passType && !['상담', '대기'].includes(raw.passType) ? raw.passType : '수강권',
@@ -690,7 +739,7 @@ function normalizeMember(raw: LegacyMember): Member {
             lastPaidAt: raw.lastPaidAt ?? '',
             nextPaymentDue: raw.nextPaymentDue || raw.passUntil || '',
             payments: raw.payments ?? [],
-          },
+          }),
         ]
       : [],
   }
@@ -1366,7 +1415,7 @@ function App() {
 
   function addMember(formData: FormData) {
     const name = String(formData.get('name') ?? '').trim()
-    const phone = String(formData.get('phone') ?? '').trim()
+    const phone = formatPhoneNumber(String(formData.get('phone') ?? ''))
     const passTemplateId = String(formData.get('passTemplateId') ?? '')
     const selectedPass = passTemplates.find((pass) => pass.id === passTemplateId)
     if (!name || !phone) {
@@ -1433,10 +1482,12 @@ function App() {
                   payment.amount === enrollment.paidAmount,
               )
               if (atNewDate >= 0) {
-                // 같은 날짜 기록이 이미 있으면 금액만 고쳐 적는다
-                payments = payments.map((payment, index) =>
-                  index === atNewDate ? { ...payment, amount: paidAmount } : payment,
-                )
+                if (paidAmount !== enrollment.paidAmount) {
+                  // 같은 날짜 기록이 이미 있으면 금액만 고쳐 적는다
+                  payments = payments.map((payment, index) =>
+                    index === atNewDate ? { ...payment, amount: paidAmount } : payment,
+                  )
+                }
               } else if (lastPaidAt !== enrollment.lastPaidAt && previousRecord >= 0) {
                 // 결제일을 고친 경우: 직전 결제 기록을 새 날짜로 옮긴다
                 payments = payments.map((payment, index) =>
@@ -1793,7 +1844,7 @@ function App() {
           ? {
               ...member,
               name: String(formData.get('name') ?? member.name),
-              phone: String(formData.get('phone') ?? member.phone),
+              phone: formatPhoneNumber(String(formData.get('phone') ?? member.phone)),
               status: String(formData.get('status') ?? member.status) as MemberStatus,
               interest: String(formData.get('interest') ?? member.interest ?? ''),
               note: String(formData.get('note') ?? member.note),
@@ -1806,7 +1857,7 @@ function App() {
 
   function addConsultation(formData: FormData) {
     const name = String(formData.get('name') ?? '').trim()
-    const phone = String(formData.get('phone') ?? '').trim()
+    const phone = formatPhoneNumber(String(formData.get('phone') ?? ''))
     if (!name || !phone) {
       notify('이름과 전화번호를 입력해 주세요')
       return
@@ -1868,7 +1919,7 @@ function App() {
           ? {
               ...member,
               name: String(formData.get('name') ?? member.name).trim() || member.name,
-              phone: String(formData.get('phone') ?? member.phone),
+              phone: formatPhoneNumber(String(formData.get('phone') ?? member.phone)),
               status: String(formData.get('status') ?? member.status) as MemberStatus,
               consultedAt: String(formData.get('consultedAt') ?? member.consultedAt ?? ''),
               interest: String(formData.get('interest') ?? member.interest ?? ''),
@@ -4326,33 +4377,51 @@ function MembersView({
                 enrollment.payments.reduce((inner, payment) => inner + payment.amount, 0),
               0,
             )
+            const toggleOpen = () => setOpenMemberId(isOpen && !isEditing ? null : member.id)
             return (
               <article className="memberCard memberLookupCard" key={member.id}>
-                <div className="memberLookupSummary">
-                  <div
-                    className="memberCardHead"
-                    onClick={() => setOpenMemberId(isOpen && !isEditing ? null : member.id)}
-                  >
+                <div className="memberLookupSummary" onClick={toggleOpen}>
+                  <div className="memberCardHead">
                     <div className="memberLookupTop">
                       <div className="memberAvatar">{member.name.slice(0, 1)}</div>
                       <div className="memberMain">
-                        <strong>{member.name}</strong>
+                        <button
+                          type="button"
+                          className="memberNameButton"
+                          aria-expanded={isOpen}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            toggleOpen()
+                          }}
+                        >
+                          <strong>{member.name}</strong>
+                        </button>
                         <a href={`tel:${member.phone}`} onClick={(event) => event.stopPropagation()}>
                           <Phone size={13} /> {member.phone}
                         </a>
                       </div>
                       <div className="memberMeta">
-                        <b className={`memberBadge status-${member.status}`}>
-                          {memberStatusLabel(member.status)} 회원
-                        </b>
                         {member.status === 'active' && member.enrollments.length > 0 && (
                           <b className={`memberBadge pay ${worst}`}>{paymentLabel(worst)}</b>
                         )}
                       </div>
                     </div>
-                    {member.status === 'active' ? (
-                      member.enrollments.length ? (
-                        <div className="enrollLines">
+                    <button
+                      type="button"
+                      className="memberCardHint"
+                      aria-expanded={isOpen}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        toggleOpen()
+                      }}
+                    >
+                      {member.enrollments.length ? `수강권 ${member.enrollments.length}개` : '수강권 없음'}
+                    </button>
+                  </div>
+                  {isOpen && (
+                    <>
+                      {member.enrollments.length > 0 && (
+                        <div className="enrollLines" aria-label={`${member.name} 수강권`}>
                           {member.enrollments.map((enrollment) => {
                             const status = enrollmentStatus(enrollment)
                             return (
@@ -4365,26 +4434,7 @@ function MembersView({
                             )
                           })}
                         </div>
-                      ) : (
-                        <div className="enrollLines">
-                          <div className="enrollLine">
-                            <span>수강권 없음</span>
-                            <b className="soon">아래에서 추가</b>
-                          </div>
-                        </div>
-                      )
-                    ) : (
-                      <div className="consultInfo">
-                        <span>
-                          {member.consultedAt ?? '상담일 없음'}
-                          {member.interest && ` · ${member.interest}`}
-                        </span>
-                        {member.note && <p>{member.note}</p>}
-                      </div>
-                    )}
-                  </div>
-                  {isOpen && (
-                    <>
+                      )}
                       {member.status === 'active' && (
                         <dl className="memberFacts">
                           <div>
@@ -4402,7 +4452,10 @@ function MembersView({
                       <button
                         type="button"
                         className="editMemberButton"
-                        onClick={() => setEditingMemberId(isEditing ? null : member.id)}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          setEditingMemberId(isEditing ? null : member.id)
+                        }}
                       >
                         {isEditing ? '닫기' : '수정'}
                       </button>
@@ -5708,6 +5761,9 @@ function PaymentsView({
   const [logVisible, setLogVisible] = useState(30)
   const [monthlyLedgerExpanded, setMonthlyLedgerExpanded] = useState(false)
   const [financialSummaryExpanded, setFinancialSummaryExpanded] = useState(false)
+  const [financialDetail, setFinancialDetail] = useState<
+    'fees' | 'gigs' | 'upcoming' | 'receivables' | 'history' | 'year' | 'forecast' | 'average' | 'status' | null
+  >(null)
   const counts = {
     paid: members.filter((member) => memberWorstStatus(member) === 'paid').length,
     soon: members.filter((member) => memberWorstStatus(member) === 'soon').length,
@@ -5855,19 +5911,50 @@ function PaymentsView({
       <section className="paymentHero" aria-label="이번 달 재무 요약">
         <p>이번 달 총수입</p>
         <strong>{formatCurrency(monthTotal + monthGigTotal)}</strong>
-        <div className="paymentHeroMetrics">
-          <span>
-            회비 {formatCurrency(monthTotal)}
-            {monthCount > 0 && ` · ${monthCount}건`}
-          </span>
-          <span>
-            외부 강의 {formatCurrency(monthGigTotal)}
-            {monthGigs.length > 0 && ` · ${monthGigs.length}회`}
-          </span>
+        <div className="financialSummaryActions">
+          <button
+            type="button"
+            className={financialDetail === 'fees' ? 'active' : ''}
+            aria-pressed={financialDetail === 'fees'}
+            onClick={() => setFinancialDetail((current) => (current === 'fees' ? null : 'fees'))}
+          >
+            <span>회비</span>
+            <strong>{formatCurrency(monthTotal)}</strong>
+            <small>{monthCount}건</small>
+          </button>
+          <button
+            type="button"
+            className={financialDetail === 'gigs' ? 'active' : ''}
+            aria-pressed={financialDetail === 'gigs'}
+            onClick={() => setFinancialDetail((current) => (current === 'gigs' ? null : 'gigs'))}
+          >
+            <span>외부 강의</span>
+            <strong>{formatCurrency(monthGigTotal)}</strong>
+            <small>{monthGigs.length}회</small>
+          </button>
+          {upcomingGigTotal > 0 && (
+            <button
+              type="button"
+              className={financialDetail === 'upcoming' ? 'active' : ''}
+              aria-pressed={financialDetail === 'upcoming'}
+              onClick={() => setFinancialDetail((current) => (current === 'upcoming' ? null : 'upcoming'))}
+            >
+              <span>남은 강의 예정</span>
+              <strong>{formatCurrency(upcomingGigTotal)}</strong>
+              <small>{upcomingGigs.length}회</small>
+            </button>
+          )}
           {unpaidTotal > 0 && (
-            <span className="heroDanger">
-              미수 {formatCurrency(unpaidTotal)} · {unpaidList.length}건
-            </span>
+            <button
+              type="button"
+              className={`heroDanger ${financialDetail === 'receivables' ? 'active' : ''}`}
+              aria-pressed={financialDetail === 'receivables'}
+              onClick={() => setFinancialDetail((current) => (current === 'receivables' ? null : 'receivables'))}
+            >
+              <span>받을 회비</span>
+              <strong>{formatCurrency(unpaidTotal)}</strong>
+              <small>{unpaidList.length}건</small>
+            </button>
           )}
         </div>
         <button
@@ -5879,19 +5966,95 @@ function PaymentsView({
         </button>
         {financialSummaryExpanded && (
           <div className="financialSummaryDetails">
-            {upcomingGigTotal > 0 && (
-              <span>
-                이달 남은 강의 예정 {formatCurrency(upcomingGigTotal)} · {upcomingGigs.length}회
-              </span>
-            )}
-            <span>지난달 총 {formatCurrency(lastMonthTotal + lastMonthGigTotal)}</span>
-            <span>올해 실제 수입 {formatCurrency(yearTotal)}</span>
+            <button
+              type="button"
+              className={financialDetail === 'history' ? 'active' : ''}
+              aria-pressed={financialDetail === 'history'}
+              onClick={() => setFinancialDetail('history')}
+            >
+              지난달 총 {formatCurrency(lastMonthTotal + lastMonthGigTotal)}
+            </button>
+            <button
+              type="button"
+              className={financialDetail === 'year' ? 'active' : ''}
+              aria-pressed={financialDetail === 'year'}
+              onClick={() => setFinancialDetail('year')}
+            >
+              올해 실제 수입 {formatCurrency(yearTotal)}
+            </button>
             {incomeSummary.futureScheduledTotal > 0 && (
-              <span>예정 수입 {formatCurrency(incomeSummary.futureScheduledTotal)}</span>
+              <button
+                type="button"
+                className={financialDetail === 'forecast' ? 'active' : ''}
+                aria-pressed={financialDetail === 'forecast'}
+                onClick={() => setFinancialDetail('forecast')}
+              >
+                예정 수입 {formatCurrency(incomeSummary.futureScheduledTotal)}
+              </button>
             )}
-            <span>월 평균 회비 {formatCurrency(monthlyAverage)}</span>
-            <span>완납 {counts.paid} · 임박 {counts.soon} · 미납 {counts.unpaid}</span>
+            <button
+              type="button"
+              className={financialDetail === 'average' ? 'active' : ''}
+              aria-pressed={financialDetail === 'average'}
+              onClick={() => setFinancialDetail('average')}
+            >
+              월 평균 회비 {formatCurrency(monthlyAverage)}
+            </button>
+            <button
+              type="button"
+              className={financialDetail === 'status' ? 'active' : ''}
+              aria-pressed={financialDetail === 'status'}
+              onClick={() => setFinancialDetail('status')}
+            >
+              완납 {counts.paid} · 임박 {counts.soon} · 미납 {counts.unpaid}
+            </button>
           </div>
+        )}
+        {financialDetail && (
+          <section className="financialDetailPanel" aria-live="polite">
+            {financialDetail === 'fees' && (
+              <>
+                <h2>이번 달 회비 입금</h2>
+                <ul>
+                  {monthPayments.map((payment) => (
+                    <li key={`${payment.ref.kind}-${payment.sourceOrder}`}>
+                      <span>{payment.memberName} · {payment.passName}</span>
+                      <b>{formatCurrency(payment.amount)}</b>
+                    </li>
+                  ))}
+                  {!monthPayments.length && <li><span>입금 내역이 없습니다.</span></li>}
+                </ul>
+              </>
+            )}
+            {financialDetail === 'gigs' && (
+              <>
+                <h2>이번 달 외부 강의</h2>
+                <ul>
+                  {monthGigs.map((gig) => (
+                    <li key={gig.id}><span>{gig.date.slice(5).replace('-', '/')} · {gig.name}</span><b>{formatCurrency(gig.fee)}</b></li>
+                  ))}
+                  {!monthGigs.length && <li><span>완료된 외부 강의가 없습니다.</span></li>}
+                </ul>
+              </>
+            )}
+            {financialDetail === 'upcoming' && (
+              <>
+                <h2>이달 남은 외부 강의</h2>
+                <ul>{upcomingGigs.map((gig) => <li key={gig.id}><span>{gig.date.slice(5).replace('-', '/')} · {gig.name}</span><b>{formatCurrency(gig.fee)}</b></li>)}</ul>
+              </>
+            )}
+            {financialDetail === 'receivables' && (
+              <>
+                <h2>받을 회비</h2>
+                <ul>{unpaidList.map(({ member, enrollment }) => <li key={enrollment.id}><span>{member.name} · {enrollment.passName}</span><b>{formatCurrency(enrollment.paidAmount)}</b></li>)}</ul>
+              </>
+            )}
+            {financialDetail === 'history' && <><h2>지난달 수입</h2><p>회비와 외부 강의를 합쳐 {formatCurrency(lastMonthTotal + lastMonthGigTotal)}입니다.</p></>}
+            {financialDetail === 'year' && <><h2>올해 실제 수입</h2><p>실제 입금된 회비와 완료된 외부 강의를 합쳐 {formatCurrency(yearTotal)}입니다.</p></>}
+            {financialDetail === 'forecast' && <><h2>예정 수입</h2><p>오늘 이후 예정된 수입은 {formatCurrency(incomeSummary.futureScheduledTotal)}입니다.</p></>}
+            {financialDetail === 'average' && <><h2>월 평균 회비</h2><p>입금 기록이 있는 달을 기준으로 {formatCurrency(monthlyAverage)}입니다.</p></>}
+            {financialDetail === 'status' && <><h2>결제 상태</h2><p>완납 {counts.paid}명 · 임박 {counts.soon}명 · 미납 {counts.unpaid}명</p></>}
+          </section>
         )}
       </section>
 

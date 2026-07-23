@@ -187,13 +187,103 @@ test('puts a compact financial summary before the ledger and reveals deeper figu
   const [summaryBox, ledgerBox] = await Promise.all([summary.boundingBox(), ledger.boundingBox()])
 
   expect(summaryBox?.y).toBeLessThan(ledgerBox?.y ?? Number.POSITIVE_INFINITY)
-  await expect(summary.getByText('회비 ₩420,000 · 2건')).toBeVisible()
+  await expect(summary.getByRole('button', { name: /회비.*₩420,000.*2건/ })).toBeVisible()
   await expect(summary.getByRole('button', { name: '재무 요약 상세' })).toBeVisible()
   await expect(summary.getByText('올해 실제 수입')).toHaveCount(0)
 
   await summary.getByRole('button', { name: '재무 요약 상세' }).click()
   await expect(summary.getByText('올해 실제 수입')).toBeVisible()
   await expect(summary.getByText('예정 수입')).toBeVisible()
+})
+
+test('shows only the selected financial detail from the monthly summary', async ({ page }) => {
+  await page.addInitScript(() => {
+    const saved = localStorage.getItem('line-dance-manager-v3')
+    if (!saved) return
+    const data = JSON.parse(saved) as { gigs: Array<Record<string, unknown>> }
+    const now = new Date()
+    data.gigs.push({
+      date: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`,
+      endTime: '11:00',
+      fee: 100,
+      id: 'gig-current',
+      name: '이번 달 완료 강의',
+      startTime: '10:00',
+    })
+    localStorage.setItem('line-dance-manager-v3', JSON.stringify(data))
+  })
+  await page.goto('./')
+  await page.getByRole('button', { name: '결제', exact: true }).click()
+
+  const summary = page.getByRole('region', { name: '이번 달 재무 요약' })
+  await summary.getByRole('button', { name: /회비.*₩420,000/ }).click()
+  await expect(summary.getByRole('heading', { name: '이번 달 회비 입금' })).toBeVisible()
+  await expect(summary.getByText('이정아')).toBeVisible()
+  await expect(summary.getByText('김세은')).toBeVisible()
+
+  await summary.getByRole('button', { name: /외부 강의.*₩100/ }).click()
+  await expect(summary.getByRole('heading', { name: '이번 달 외부 강의' })).toBeVisible()
+  await expect(summary.getByText('이번 달 완료 강의')).toBeVisible()
+  await expect(summary.getByText('이정아')).toHaveCount(0)
+
+  await summary.getByRole('button', { name: /받을 회비/ }).click()
+  await expect(summary.getByRole('heading', { name: '받을 회비' })).toBeVisible()
+  await expect(summary.getByText('김세은')).toBeVisible()
+})
+
+test('uses each enrollment recent payment date as the actual receipt date', async ({ page }) => {
+  const now = new Date()
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const recentDate = `${currentMonth}-${String(Math.max(1, now.getDate() - 1)).padStart(2, '0')}`
+  const laterDate = `${currentMonth}-${String(now.getDate()).padStart(2, '0')}`
+  await page.addInitScript(({ recentDate, laterDate }) => {
+    const saved = localStorage.getItem('line-dance-manager-v3')
+    if (!saved) return
+    const data = JSON.parse(saved) as {
+      members: Array<Record<string, unknown>>
+    }
+    data.members.push({
+      id: 'member-kim-hyojung',
+      name: '김효정',
+      phone: '010-5555-7777',
+      status: 'active',
+      note: '',
+      enrollments: [{
+        id: 'enrollment-kim-hyojung',
+        passName: '라인댄스 단체반',
+        classIds: ['class-monday'],
+        remainingCredits: 8,
+        totalCredits: 10,
+        paidAmount: 180000,
+        lastPaidAt: recentDate,
+        nextPaymentDue: '',
+        payments: [
+          { amount: 123000, date: recentDate },
+          { amount: 123000, date: laterDate },
+        ],
+      }],
+    })
+    localStorage.setItem('line-dance-manager-v3', JSON.stringify(data))
+  }, { recentDate, laterDate })
+
+  await page.goto('./')
+  await page.getByRole('button', { name: '결제', exact: true }).click()
+
+  const receipt = page
+    .getByRole('region', { name: '이번 달 입금 내역' })
+    .locator('details')
+    .filter({ hasText: '김효정' })
+  await expect(receipt).toHaveCount(2)
+  await expect(receipt.first()).toContainText(recentDate.slice(5).replace('-', '/'))
+  await expect(receipt.first()).toContainText('₩123,000')
+
+  const paymentCard = page.locator('.paymentCard').filter({ hasText: '김효정' })
+  await paymentCard.locator('details.enrollPayBlock summary').click()
+  await paymentCard.getByRole('button', { name: '결제 정보 수정' }).click()
+  await paymentCard.getByRole('button', { name: '저장', exact: true }).click()
+  await expect(receipt).toHaveCount(2)
+  const savedReceiptTexts = await receipt.allTextContents()
+  expect(savedReceiptTexts.every((text) => text.includes('₩123,000'))).toBe(true)
 })
 
 test('corrects a receipt date from the ledger without changing another receipt', async ({ page }) => {

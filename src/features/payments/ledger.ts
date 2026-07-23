@@ -82,12 +82,7 @@ export function buildPaymentLedger(
       const classNames = mappedClassNames.length
         ? [...new Set(mappedClassNames)]
         : fallbackClassNames(enrollment.passName)
-      const seenPayments = new Set<string>()
-
       for (const [paymentIndex, payment] of enrollment.payments.entries()) {
-        const duplicateKey = `${payment.date}\u0000${payment.amount}`
-        if (seenPayments.has(duplicateKey)) continue
-        seenPayments.add(duplicateKey)
         rows.push({
           ...payment,
           classNames,

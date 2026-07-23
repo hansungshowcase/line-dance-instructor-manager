@@ -18,6 +18,45 @@ test('requested workflows stay readable without horizontal overflow', async ({ p
       fullPage: true,
       path: `artifacts/qa/${viewport.label}-payments.png`,
     })
+    await page.getByRole('region', { name: '이번 달 재무 요약' }).getByRole('button', { name: /^회비/ }).click()
+    await page.screenshot({
+      fullPage: true,
+      path: `artifacts/qa/${viewport.label}-payments-fee-detail.png`,
+    })
+    await page.evaluate(() => window.scrollTo(0, 520))
+    await page.waitForTimeout(250)
+    await page.screenshot({
+      fullPage: false,
+      path: `artifacts/qa/${viewport.label}-payments-fee-detail-scroll.png`,
+    })
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true)
+
+    await page.getByRole('button', { name: '회원', exact: true }).click()
+    await expect(page.getByRole('heading', { name: '회원 목록' })).toBeVisible()
+    await page.screenshot({
+      fullPage: true,
+      path: `artifacts/qa/${viewport.label}-members-compact.png`,
+    })
+    await page.evaluate(() => window.scrollTo(0, 320))
+    await page.waitForTimeout(250)
+    await page.screenshot({
+      fullPage: false,
+      path: `artifacts/qa/${viewport.label}-members-compact-scroll.png`,
+    })
+    await page.evaluate(() => window.scrollTo(0, 0))
+    await page.locator('.memberCardHint').first().click()
+    await page.screenshot({
+      fullPage: true,
+      path: `artifacts/qa/${viewport.label}-members-detail.png`,
+    })
+    await page.evaluate(() => window.scrollTo(0, 420))
+    await page.waitForTimeout(250)
+    await page.screenshot({
+      fullPage: false,
+      path: `artifacts/qa/${viewport.label}-members-detail-scroll.png`,
+    })
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true)

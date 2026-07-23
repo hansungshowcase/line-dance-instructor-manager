@@ -37,12 +37,14 @@ test('instructor can manage classes, members, attendance, and payment details', 
   const memberDrawer = page.locator('details.formDrawer').filter({ hasText: '등록 회원 추가' })
   await page.getByRole('button', { name: '회원 등록', exact: true }).click()
   await page.getByPlaceholder('회원 이름').fill('최하은')
-  await memberDrawer.getByPlaceholder('010-0000-0000').fill('010-5555-1212')
+  await memberDrawer.getByPlaceholder('010-0000-0000').fill('01055551212')
   // 수강권을 고르면 수업이 자동 배정된다
   await memberDrawer.locator('select[name="passTemplateId"]').selectOption('pass-beginner-monthly')
     await memberDrawer.locator('input[name="note"]').fill('오전반 신규')
   await page.getByRole('button', { name: '추가' }).click()
-  await expect(page.locator('.memberLookupCard').filter({ hasText: '최하은' }).filter({ hasText: '등록 회원' })).toBeVisible()
+  const choiCard = page.locator('.memberLookupCard').filter({ hasText: '최하은' })
+  await expect(choiCard).toBeVisible()
+  await expect(choiCard.getByRole('link', { name: /010-5555-1212/ })).toBeVisible()
 
   // 새 수강권을 만들면 등록 회원 추가 폼의 수강권 목록에 즉시 반영되어야 한다
   const passDrawer = page.locator('details.formDrawer').filter({ hasText: '수강권 만들기' })
@@ -57,22 +59,19 @@ test('instructor can manage classes, members, attendance, and payment details', 
   await page
     .locator('.memberLookupCard')
     .filter({ hasText: '최하은' })
-    .filter({ hasText: '등록 회원' })
-    .locator('.memberCardHead .enrollLine')
-    .first()
+    .locator('.memberCardHint')
     .click()
-  await page.locator('.memberLookupCard').filter({ hasText: '최하은' }).filter({ hasText: '등록 회원' }).locator('.editMemberButton').click()
+  await page.locator('.memberLookupCard').filter({ hasText: '최하은' }).locator('.editMemberButton').click()
   await expect(page.getByText('₩95,000').first()).toBeVisible()
-  await page.locator('.memberLookupCard').filter({ hasText: '최하은' }).filter({ hasText: '등록 회원' }).locator('textarea[name="note"]').fill('첫 상담 완료, 다음 주 등록 예정')
+  await page.locator('.memberLookupCard').filter({ hasText: '최하은' }).locator('textarea[name="note"]').fill('첫 상담 완료, 다음 주 등록 예정')
   await page
     .locator('.memberLookupCard')
     .filter({ hasText: '최하은' })
-    .filter({ hasText: '등록 회원' })
     .locator('form')
     .filter({ hasText: '기본 정보' })
     .getByRole('button', { name: '저장', exact: true })
     .click()
-  await page.locator('.memberLookupCard').filter({ hasText: '최하은' }).filter({ hasText: '등록 회원' }).locator('.editMemberButton').click()
+  await page.locator('.memberLookupCard').filter({ hasText: '최하은' }).locator('.editMemberButton').click()
   await expect(
     page.locator('.memberLookupFoot').filter({ hasText: '첫 상담 완료, 다음 주 등록 예정' }),
   ).toBeVisible()

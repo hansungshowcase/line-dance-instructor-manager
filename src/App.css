@@ -2343,6 +2343,33 @@ button {
   cursor: pointer;
 }
 
+.memberCardHint {
+  align-self: flex-start;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+}
+
+.memberCardHint:focus-visible,
+.memberNameButton:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+
+.memberNameButton {
+  min-height: 28px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  text-align: left;
+}
+
 .memberQuickFilters {
   padding: 12px 16px 4px;
   margin-bottom: 0;
@@ -3534,14 +3561,48 @@ button {
   background: var(--soft);
 }
 
-.paymentHeroMetrics {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+.financialSummaryActions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 
-.paymentHeroMetrics span + span {
-  margin-left: 0;
+.financialSummaryActions button {
+  min-width: 0;
+  min-height: 76px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.12);
+  color: white;
+  padding: 10px;
+  text-align: left;
+}
+
+.financialSummaryActions button.active {
+  border-color: white;
+  background: rgba(255, 255, 255, 0.24);
+}
+
+.financialSummaryActions span,
+.financialSummaryActions strong,
+.financialSummaryActions small {
+  display: block;
+}
+
+.financialSummaryActions span,
+.financialSummaryActions small {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.financialSummaryActions strong {
+  margin: 3px 0;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.financialSummaryActions .heroDanger {
+  background: rgba(224, 73, 47, 0.22);
 }
 
 .financialSummaryToggle {
@@ -3563,14 +3624,67 @@ button {
   margin-top: 10px;
 }
 
-.financialSummaryDetails span,
-.financialSummaryDetails span + span {
+.financialSummaryDetails button {
   min-width: 0;
   margin: 0;
+  border: 0;
   border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.14);
+  color: white;
   padding: 8px;
+  text-align: left;
   line-height: 1.4;
+}
+
+.financialSummaryDetails button.active {
+  box-shadow: inset 0 0 0 1px white;
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.financialDetailPanel {
+  margin-top: 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.16);
+  padding: 12px;
+}
+
+.financialDetailPanel h2,
+.financialDetailPanel p {
+  margin: 0;
+}
+
+.financialDetailPanel h2 {
+  font-size: 14px;
+}
+
+.financialDetailPanel p,
+.financialDetailPanel li {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.financialDetailPanel ul {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.financialDetailPanel li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.financialDetailPanel li span {
+  min-width: 0;
+}
+
+.financialDetailPanel li b {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
 }
 
 .endEnrollmentButton {
@@ -4050,6 +4164,10 @@ button {
 
 .fab:active {
   transform: scale(0.9);
+}
+
+.appShell.tab-members .fab {
+  display: none;
 }
 
 /* ---------- 하단 내비게이션 ---------- */
