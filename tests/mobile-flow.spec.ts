@@ -218,7 +218,7 @@ test('gig end-time & edit, private lesson quick-add rules, custom waitlist class
 
   // ── 결제 탭 재무 현황: 총 수입 히어로 + 받아야 할 회비 목록 (박선희가 미납)
   await page.getByRole('button', { name: '결제', exact: true }).click()
-  await expect(page.getByText('이번 달 총 수입 (회비 + 외부 강의)')).toBeVisible()
+  await expect(page.getByText('이번 달 총수입')).toBeVisible()
   await expect(page.getByRole('heading', { name: '받아야 할 회비' })).toBeVisible()
   const dueRow = page.locator('.dueRow').filter({ hasText: '박선희' })
   await expect(dueRow).toBeVisible()

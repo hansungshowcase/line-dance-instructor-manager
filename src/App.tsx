@@ -1506,10 +1506,7 @@ function App() {
   }
 
   // 잘못 기록된 수납 1건을 지운다 (수강권 등록·수정 실수로 매출이 부풀었을 때 정리용)
-  function removePaymentRecord(
-    ref: PaymentSourceRef,
-    record: PaymentRecord,
-  ) {
+  function removePaymentRecord(ref: PaymentSourceRef) {
     if (ref.kind === 'archive') {
       setPaymentArchive((current) => current.filter((_, index) => index !== ref.index))
     } else {
@@ -1520,13 +1517,9 @@ function App() {
             ...member,
             enrollments: member.enrollments.map((enrollment) => {
               if (enrollment.id !== ref.enrollmentId) return enrollment
-              const removeIndex = enrollment.payments.findIndex(
-                (payment) => payment.date === record.date && payment.amount === record.amount,
-              )
-              if (removeIndex < 0) return enrollment
               return {
                 ...enrollment,
-                payments: enrollment.payments.filter((_, index) => index !== removeIndex),
+                payments: enrollment.payments.filter((_, index) => index !== ref.paymentIndex),
               }
             }),
           }
@@ -1534,6 +1527,47 @@ function App() {
       )
     }
     notify('수납 기록 1건을 삭제했습니다')
+  }
+
+  function updatePaymentDate(ref: PaymentSourceRef, record: PaymentRecord, date: string) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date === record.date) return
+    if (ref.kind === 'archive') {
+      setPaymentArchive((current) =>
+        current.map((payment, index) => (index === ref.index ? { ...payment, date } : payment)),
+      )
+    } else {
+      const enrollment = members
+        .find((member) => member.id === ref.memberId)
+        ?.enrollments.find((item) => item.id === ref.enrollmentId)
+      const createsDuplicate = enrollment?.payments.some(
+        (payment, index) =>
+          index !== ref.paymentIndex && payment.date === date && payment.amount === record.amount,
+      )
+      if (createsDuplicate) {
+        notify('같은 날짜·금액의 입금 기록이 이미 있습니다.')
+        return
+      }
+      setMembers((current) =>
+        current.map((member) => {
+          if (member.id !== ref.memberId) return member
+          return {
+            ...member,
+            enrollments: member.enrollments.map((enrollment) => {
+              if (enrollment.id !== ref.enrollmentId) return enrollment
+              const payments = enrollment.payments.map((payment, index) =>
+                index === ref.paymentIndex ? { ...payment, date } : payment,
+              )
+              const lastPaidAt = payments.reduce(
+                (latest, payment) => (payment.date > latest ? payment.date : latest),
+                '',
+              )
+              return { ...enrollment, lastPaidAt, payments }
+            }),
+          }
+        }),
+      )
+    }
+    notify('실제 입금일을 수정했습니다')
   }
 
   function quickRenew(memberId: string, enrollmentId: string) {
@@ -2479,6 +2513,7 @@ function App() {
           onEndEnrollment={removeEnrollment}
           onQuickRenew={quickRenew}
           onRemovePayment={removePaymentRecord}
+          onUpdatePaymentDate={updatePaymentDate}
           onUpdateEnrollment={updateEnrollment}
         />
       )}
@@ -5652,6 +5687,7 @@ function PaymentsView({
   onOpenSms,
   onQuickRenew,
   onRemovePayment,
+  onUpdatePaymentDate,
   onUpdateEnrollment,
 }: {
   classes: DanceClass[]
@@ -5662,16 +5698,16 @@ function PaymentsView({
   onNotify: (message: string) => void
   onOpenSms: (memberId: string) => void
   onQuickRenew: (memberId: string, enrollmentId: string) => void
-  onRemovePayment: (
-    ref: PaymentSourceRef,
-    record: PaymentRecord,
-  ) => void
+  onRemovePayment: (ref: PaymentSourceRef) => void
+  onUpdatePaymentDate: (ref: PaymentSourceRef, record: PaymentRecord, date: string) => void
   onUpdateEnrollment: (memberId: string, enrollmentId: string, formData: FormData) => void
 }) {
   const [statusFilter, setStatusFilter] = useState<PaymentStatus | 'all'>('all')
   const [openEditorId, setOpenEditorId] = useState<string | null>(null)
   const [logMonth, setLogMonth] = useState<'this' | 'last' | 'all'>('this')
   const [logVisible, setLogVisible] = useState(30)
+  const [monthlyLedgerExpanded, setMonthlyLedgerExpanded] = useState(false)
+  const [financialSummaryExpanded, setFinancialSummaryExpanded] = useState(false)
   const counts = {
     paid: members.filter((member) => memberWorstStatus(member) === 'paid').length,
     soon: members.filter((member) => memberWorstStatus(member) === 'soon').length,
@@ -5684,6 +5720,7 @@ function PaymentsView({
   const receivedPayments = allPayments.filter((payment) => payment.date <= todayKey)
   const incomeSummary = calculateIncomeSummary(allPayments, gigs, todayKey)
   const monthPayments = receivedPayments.filter((payment) => payment.date.startsWith(monthKey))
+  const shownMonthPayments = monthlyLedgerExpanded ? monthPayments : monthPayments.slice(0, 3)
   const monthTotal = incomeSummary.monthPaymentTotal
   const lastMonthDate = new Date(today.getFullYear(), today.getMonth() - 1, 1)
   const lastMonthKey = `${lastMonthDate.getFullYear()}-${String(lastMonthDate.getMonth() + 1).padStart(2, '0')}`
@@ -5815,6 +5852,49 @@ function PaymentsView({
 
   return (
     <section className="screen">
+      <section className="paymentHero" aria-label="이번 달 재무 요약">
+        <p>이번 달 총수입</p>
+        <strong>{formatCurrency(monthTotal + monthGigTotal)}</strong>
+        <div className="paymentHeroMetrics">
+          <span>
+            회비 {formatCurrency(monthTotal)}
+            {monthCount > 0 && ` · ${monthCount}건`}
+          </span>
+          <span>
+            외부 강의 {formatCurrency(monthGigTotal)}
+            {monthGigs.length > 0 && ` · ${monthGigs.length}회`}
+          </span>
+          {unpaidTotal > 0 && (
+            <span className="heroDanger">
+              미수 {formatCurrency(unpaidTotal)} · {unpaidList.length}건
+            </span>
+          )}
+        </div>
+        <button
+          type="button"
+          className="financialSummaryToggle"
+          onClick={() => setFinancialSummaryExpanded((current) => !current)}
+        >
+          {financialSummaryExpanded ? '재무 요약 접기' : '재무 요약 상세'}
+        </button>
+        {financialSummaryExpanded && (
+          <div className="financialSummaryDetails">
+            {upcomingGigTotal > 0 && (
+              <span>
+                이달 남은 강의 예정 {formatCurrency(upcomingGigTotal)} · {upcomingGigs.length}회
+              </span>
+            )}
+            <span>지난달 총 {formatCurrency(lastMonthTotal + lastMonthGigTotal)}</span>
+            <span>올해 실제 수입 {formatCurrency(yearTotal)}</span>
+            {incomeSummary.futureScheduledTotal > 0 && (
+              <span>예정 수입 {formatCurrency(incomeSummary.futureScheduledTotal)}</span>
+            )}
+            <span>월 평균 회비 {formatCurrency(monthlyAverage)}</span>
+            <span>완납 {counts.paid} · 임박 {counts.soon} · 미납 {counts.unpaid}</span>
+          </div>
+        )}
+      </section>
+
       <section className="panel monthlyPaymentLedger" aria-label="이번 달 입금 내역">
         <div className="ledgerHeading">
           <div>
@@ -5823,70 +5903,71 @@ function PaymentsView({
           </div>
           <strong>{formatCurrency(monthTotal)}</strong>
         </div>
-        <div className="listStack">
-          {monthPayments.map((payment) => (
-            <div
-              className="paymentLogRow"
+        <div className="monthlyLedgerRows">
+          {shownMonthPayments.map((payment) => (
+            <details
+              className="paymentLogRow monthlyPaymentRow"
               key={`${payment.ref.kind}-${payment.sourceOrder}`}
             >
-              <span className="paymentLogDate">{payment.date.slice(5).replace('-', '/')}</span>
-              <strong>
-                {payment.memberName}
-                <small> · {payment.passName}</small>
-                <small className="paymentClassName">{payment.classNames.join(' · ')}</small>
-              </strong>
-              <b>{formatCurrency(payment.amount)}</b>
-              <button
-                type="button"
-                className="paymentLogDelete"
-                aria-label={`${payment.memberName} ${payment.date} 수납 기록 삭제`}
-                onClick={() => {
-                  if (
-                    window.confirm(
-                      `${payment.date} ${payment.memberName} ${formatCurrency(payment.amount)} 수납 기록을 삭제할까요?\n(매출 합계에서 빠져요)`,
-                    )
-                  ) {
-                    onRemovePayment(payment.ref, { amount: payment.amount, date: payment.date })
-                  }
-                }}
-              >
-                ✕
-              </button>
-            </div>
+              <summary>
+                <span className="paymentLogDate">{payment.date.slice(5).replace('-', '/')}</span>
+                <strong>{payment.memberName}</strong>
+                <b>{formatCurrency(payment.amount)}</b>
+              </summary>
+              <div className="monthlyPaymentDetail">
+                <p>
+                  <span>수강권</span>
+                  <b>{payment.passName}</b>
+                </p>
+                <p>
+                  <span>수업</span>
+                  <b>{payment.classNames.join(' · ')}</b>
+                </p>
+                <form
+                  className="monthlyPaymentDateForm"
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    const date = String(new FormData(event.currentTarget).get('paymentDate') ?? '')
+                    onUpdatePaymentDate(payment.ref, { amount: payment.amount, date: payment.date }, date)
+                  }}
+                >
+                  <label>
+                    실제 입금일
+                    <input aria-label="실제 입금일" defaultValue={payment.date} name="paymentDate" type="date" />
+                  </label>
+                  <button type="submit">입금일 저장</button>
+                </form>
+                <button
+                  type="button"
+                  className="paymentLogDelete"
+                  aria-label={`${payment.memberName} ${payment.date} 수납 기록 삭제`}
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        `${payment.date} ${payment.memberName} ${formatCurrency(payment.amount)} 수납 기록을 삭제할까요?\n(매출 합계에서 빠져요)`,
+                      )
+                    ) {
+                      onRemovePayment(payment.ref)
+                    }
+                  }}
+                >
+                  이 입금 기록 삭제
+                </button>
+              </div>
+            </details>
           ))}
           {!monthPayments.length && (
             <p className="emptyText">이번 달에 기록된 입금이 없습니다.</p>
           )}
         </div>
-      </section>
-
-      <section className="paymentHero">
-        <p>이번 달 총 수입 (회비 + 외부 강의)</p>
-        <strong>{formatCurrency(monthTotal + monthGigTotal)}</strong>
-        <span>
-          회비 {formatCurrency(monthTotal)}
-          {monthCount > 0 && ` · ${monthCount}건`}
-        </span>
-        <span>
-          외부 강의 {formatCurrency(monthGigTotal)}
-          {monthGigs.length > 0 && ` · ${monthGigs.length}회`}
-        </span>
-        {upcomingGigTotal > 0 && (
-          <span>
-            이달 남은 강의 예정 +{formatCurrency(upcomingGigTotal)} · {upcomingGigs.length}회
-          </span>
-        )}
-        <span>지난달 총 {formatCurrency(lastMonthTotal + lastMonthGigTotal)}</span>
-        <span>올해 실제 수입 {formatCurrency(yearTotal)}</span>
-        {incomeSummary.futureScheduledTotal > 0 && (
-          <span>예정 수입 {formatCurrency(incomeSummary.futureScheduledTotal)}</span>
-        )}
-        <span>월 평균 회비 {formatCurrency(monthlyAverage)}</span>
-        <span>완납 {counts.paid} · 임박 {counts.soon} · 미납 {counts.unpaid}</span>
-        {unpaidTotal > 0 && (
-          <span className="heroDanger">
-            받아야 할 회비 {formatCurrency(unpaidTotal)} · {unpaidList.length}건
-          </span>
+        {monthPayments.length > 3 && (
+          <button
+            type="button"
+            className="monthlyLedgerToggle"
+            onClick={() => setMonthlyLedgerExpanded((current) => !current)}
+          >
+            {monthlyLedgerExpanded ? '입금 내역 접기' : `전체 ${monthPayments.length}건 보기`}
+          </button>
         )}
       </section>
 
@@ -6256,7 +6337,7 @@ function PaymentsView({
                       `${payment.date} ${payment.memberName} ${formatCurrency(payment.amount)} 수납 기록을 삭제할까요?\n(매출 합계에서 빠져요)`,
                     )
                   ) {
-                    onRemovePayment(payment.ref, { amount: payment.amount, date: payment.date })
+                    onRemovePayment(payment.ref)
                   }
                 }}
               >

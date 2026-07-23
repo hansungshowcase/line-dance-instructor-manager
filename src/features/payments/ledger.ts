@@ -1,5 +1,10 @@
 export type PaymentSourceRef =
-  | { readonly kind: 'member'; readonly memberId: string; readonly enrollmentId: string }
+  | {
+      readonly kind: 'member'
+      readonly memberId: string
+      readonly enrollmentId: string
+      readonly paymentIndex: number
+    }
   | { readonly kind: 'archive'; readonly index: number }
 
 export type PaymentLedgerRow = {
@@ -79,7 +84,7 @@ export function buildPaymentLedger(
         : fallbackClassNames(enrollment.passName)
       const seenPayments = new Set<string>()
 
-      for (const payment of enrollment.payments) {
+      for (const [paymentIndex, payment] of enrollment.payments.entries()) {
         const duplicateKey = `${payment.date}\u0000${payment.amount}`
         if (seenPayments.has(duplicateKey)) continue
         seenPayments.add(duplicateKey)
@@ -88,7 +93,12 @@ export function buildPaymentLedger(
           classNames,
           memberName: member.name,
           passName: enrollment.passName,
-          ref: { kind: 'member', memberId: member.id, enrollmentId: enrollment.id },
+          ref: {
+            kind: 'member',
+            memberId: member.id,
+            enrollmentId: enrollment.id,
+            paymentIndex,
+          },
           sourceOrder,
         })
         sourceOrder += 1
